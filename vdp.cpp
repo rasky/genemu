@@ -14,6 +14,7 @@ extern int framecounter;
 #define REG1_DMA_ENABLED      BIT(regs[1], 4)
 #define REG15_DMA_INCREMENT   regs[15]
 #define REG19_DMA_LENGTH      (regs[19] | (regs[20] << 8))
+#define REG21_DMA_SRC_ADDRESS ((regs[21] | (regs[22] << 8) | ((regs[23] & 0x7F) << 16)) << 1)
 #define REG23_DMA_TYPE        BITS(regs[23], 6, 2)
 
 class VDP
@@ -35,6 +36,7 @@ private:
     int hcounter();
     void dma_trigger();
     void dma_fill(uint16_t value);
+    void dma_m68k();
 
 public:
     void scanline();
@@ -82,12 +84,12 @@ void VDP::data_port_w16(uint16_t value)
         address_reg &= 0xFFFF;
         break;
     case 0x3:
-        CRAM[address_reg & 0x3E] = value;
+        CRAM[(address_reg >> 1) & 0x3E] = value;
         address_reg += 2;
         address_reg &= 0x7F;
         break;
     case 0x5:
-        VSRAM[address_reg & 0x3E] = value;
+        VSRAM[(address_reg >> 1) & 0x3E] = value;
         address_reg += 2;
         address_reg &= 0x7F;
         break;
@@ -179,6 +181,10 @@ void VDP::scanline()
     }
 }
 
+/**************************************************************
+ * DMA
+ **************************************************************/
+
 void VDP::dma_trigger()
 {
     // Check master DMA enable, otherwise skip
@@ -189,7 +195,7 @@ void VDP::dma_trigger()
     {
         case 0:
         case 1:
-            assert(!"not implemented: DMA 68k->VDP");
+            dma_m68k();
             break;
 
         case 2:
@@ -214,9 +220,9 @@ void VDP::dma_fill(uint16_t value)
     switch (code_reg & 0xF)
     {
     case 0x1:
-        mem_log("VDP", "DMA VRAM fill: address:%04x, increment:%04x, length:%d, value: %02x\n",
+        mem_log("VDP", "DMA VRAM fill: address:%04x, increment:%04x, length:%d, value: %04x\n",
             address_reg, REG15_DMA_INCREMENT, length, value);
-        VRAM[address_reg & 0xFFFF] = value;
+        VRAM[address_reg & 0xFFFF] = value & 0xFF;
         do {
             VRAM[(address_reg ^ 1) & 0xFFFF] = value >> 8;
 
@@ -224,15 +230,54 @@ void VDP::dma_fill(uint16_t value)
         } while (--length);
         break;
     case 0x3:
-        assert(!"not implemented: DMA fille CRAM");
+        assert(!"not implemented: DMA fill CRAM");
         break;
     case 0x5:
-        assert(!"not implemented: DMA fille VSRAM");
+        assert(!"not implemented: DMA fill VSRAM");
         break;
     default:
         mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
     }
 }
+
+void VDP::dma_m68k()
+{
+    int length = REG19_DMA_LENGTH;
+    int src_addr = REG21_DMA_SRC_ADDRESS;
+    switch (code_reg & 0xF)
+    {
+    case 0x1:
+        mem_log("VDP", "DMA M68K->VRAM: src_addr:%06x dst_addr:%x length:%d increment:%d\n",
+            src_addr, address_reg, length, REG15_DMA_INCREMENT);
+        do {
+            int value = m68k_read_memory_16(src_addr);
+            src_addr += 2;
+            assert(src_addr < 0x01000000);
+            VRAM[(address_reg    ) & 0xFFFF] = value & 0xFF;
+            VRAM[(address_reg ^ 1) & 0xFFFF] = value >> 8;
+            address_reg += REG15_DMA_INCREMENT;
+        } while (--length);
+        break;
+    case 0x3:
+        mem_log("VDP", "DMA M68K->CRAM: src_addr:%06x dst_addr:%x length:%d increment:%d\n",
+            src_addr, address_reg, length, REG15_DMA_INCREMENT);
+        do {
+            int value = m68k_read_memory_16(src_addr);
+            src_addr += 2;
+            assert(src_addr < 0x01000000);
+            assert(address_reg < 0x80);
+            CRAM[(address_reg >> 1) & 0x3E] = value;
+            address_reg += REG15_DMA_INCREMENT;
+        } while (--length);
+        break;
+    case 0x5:
+        assert(!"not implemented: DMA m68k copy VSRAM");
+        break;
+    default:
+        mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
+    }
+}
+
 
 void VDP::reset()
 {
