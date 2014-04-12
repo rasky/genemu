@@ -15,20 +15,31 @@ private:
     uint8_t regs[0x20];
     uint16_t address_reg;
     uint8_t code_reg;
+    uint16_t status_reg;
     int vcounter;
     bool command_word_pending;
 
 private:
     void register_w(int reg, uint8_t value);
+    int hcounter();
 
 public:
     void scanline();
     void reset();
+    uint16_t status_register_r();
     void control_port_w(uint16_t value);
     void data_port_w16(uint16_t value);
 
 } VDP;
 
+int VDP::hcounter(void)
+{
+    int cycles = m68k_cycles_run() * M68K_FREQ_DIVISOR;
+
+    // FIXME: this must be fixed to take into account
+    // the real resolution of the screen
+    return cycles * 256 / VDP_CYCLES_PER_LINE;
+}
 
 void VDP::register_w(int reg, uint8_t value)
 {
@@ -92,6 +103,40 @@ void VDP::control_port_w(uint16_t value)
     fprintf(stdout, "[VDP][PC=%06x](%04d) command word 1st: code:%02x addr:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg, address_reg);
 }
 
+uint16_t VDP::status_register_r(void)
+{
+    #define STATUS_FIFO_EMPTY      (1<<9)
+    #define STATUS_FIFO_FULL       (1<<8)
+    #define STATUS_VIRQPENDING     (1<<7)
+    #define STATUS_SPRITEOVERFLOW  (1<<6)
+    #define STATUS_SPRITECOLLISION (1<<5)
+    #define STATUS_ODDFRAME        (1<<4)
+    #define STATUS_VBLANK          (1<<3)
+    #define STATUS_HBLANK          (1<<2)
+    #define STATUS_DMAPROGRESS     (1<<1)
+    #define STATUS_PAL             (1<<1)
+
+    uint16_t status = status_reg;
+    int hc = hcounter();
+
+    // TODO: FIFO not emulated
+    status |= STATUS_FIFO_EMPTY;
+
+    // VBLANK bit
+    if (vcounter == 224 && hc >= 0xAA)
+        status |= STATUS_VBLANK;
+    else if (vcounter > 224 && vcounter < 261)
+        status |= STATUS_VBLANK;
+    else if (vcounter == 261 && hc < 0xAA)
+        status |= STATUS_VBLANK;
+
+    // HBLANK bit
+    if (hc < 8 && hc >= 228)
+        status |= STATUS_HBLANK;
+
+    return status;
+}
+
 void VDP::scanline()
 {
     vcounter++;
@@ -111,6 +156,7 @@ void VDP::reset()
     address_reg = 0;
     code_reg = 0;
     vcounter = 0;
+    status_reg = 0x3C00;
 }
 
 void vdp_mem_w8(unsigned int address, unsigned int value)
@@ -149,10 +195,7 @@ unsigned int vdp_mem_r16(unsigned int address)
     switch (address & 0x1F) {
         case 0x4:
         case 0x6:
-            // seems like a CPU/VDP bug, but the next opcode is returned here,
-            // with the 0x40 bit set to 0.
-            ret = m68k_read_memory_16(m68k_get_reg(NULL, M68K_REG_PC));
-            return ret & ~0x40;
+            return VDP.status_register_r();
         default:
             fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled read16 IO:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F);
             return 0xFF;

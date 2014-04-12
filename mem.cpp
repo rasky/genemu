@@ -160,7 +160,7 @@ void zbankreg_mem_w8(unsigned int address, unsigned int value)
     {
         Z80_BANK >>= 1;
         Z80_BANK |= (value & 1) << 8;
-        mem_log("Z80", "bank points to: %06x\n", Z80_BANK << 15);
+        // mem_log("Z80", "bank points to: %06x\n", Z80_BANK << 15);
         return;
     }
 }
