@@ -1,10 +1,20 @@
-#include "vdp.h"
 #include <stdio.h>
 #include <stdint.h>
+#include <assert.h>
+#include "vdp.h"
+#include "mem.h"
 extern "C" {
     #include "m68k/m68k.h"
 }
 extern int framecounter;
+
+#define BIT(v, idx)       (((v) >> (idx)) & 1)
+#define BITS(v, idx, n)   (((v) >> (idx)) & ((1<<(n))-1))
+
+#define REG1_DMA_ENABLED      BIT(regs[1], 4)
+#define REG15_DMA_INCREMENT   regs[15]
+#define REG19_DMA_LENGTH      (regs[19] | (regs[20] << 8))
+#define REG23_DMA_TYPE        BITS(regs[23], 6, 2)
 
 class VDP
 {
@@ -18,10 +28,13 @@ private:
     uint16_t status_reg;
     int vcounter;
     bool command_word_pending;
+    bool dma_fill_pending;
 
 private:
     void register_w(int reg, uint8_t value);
     int hcounter();
+    void dma_trigger();
+    void dma_fill(uint16_t value);
 
 public:
     void scanline();
@@ -44,11 +57,22 @@ int VDP::hcounter(void)
 void VDP::register_w(int reg, uint8_t value)
 {
     regs[reg] = value;
-    fprintf(stdout, "[VDP][PC=%06x](%04d) reg:%02x <- %02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, reg, value);
+    fprintf(stdout, "[VDP][PC=%06x](%04d) reg:%02d <- %02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, reg, value);
 }
 
 void VDP::data_port_w16(uint16_t value)
 {
+    command_word_pending = false;
+
+    // When a DMA fill is pending, the value sent to the
+    // data port is the actual fill value and triggers the fill
+    if (dma_fill_pending)
+    {
+        dma_fill_pending = false;
+        dma_fill(value);
+        return;
+    }
+
     switch (code_reg & 0xF)
     {
     case 0x1:
@@ -84,6 +108,8 @@ void VDP::control_port_w(uint16_t value)
         address_reg |= value << 14;
         command_word_pending = false;
         fprintf(stdout, "[VDP][PC=%06x](%04d) command word 2nd: code:%02x addr:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg, address_reg);
+        if (code_reg & (1<<5))
+            dma_trigger();
         return;
     }
 
@@ -134,6 +160,9 @@ uint16_t VDP::status_register_r(void)
     if (hc < 8 && hc >= 228)
         status |= STATUS_HBLANK;
 
+    // reading the status clears the pending flag for command words
+    command_word_pending = false;
+
     return status;
 }
 
@@ -147,6 +176,61 @@ void VDP::scanline()
     {
         if (regs[0x1] & (1<<5))
             m68k_set_irq(M68K_IRQ_6);
+    }
+}
+
+void VDP::dma_trigger()
+{
+    // Check master DMA enable, otherwise skip
+    if (!REG1_DMA_ENABLED)
+        return;
+
+    switch (REG23_DMA_TYPE)
+    {
+        case 0:
+        case 1:
+            assert(!"not implemented: DMA 68k->VDP");
+            break;
+
+        case 2:
+            // VRAM fill will trigger on next data port write
+            dma_fill_pending = true;
+            break;
+
+        case 3:
+            assert(!"not implemented: VRAM copy");
+            break;
+    }
+}
+
+void VDP::dma_fill(uint16_t value)
+{
+    /* FIXME: should be done in parallel and non blocking */
+    int length = REG19_DMA_LENGTH;
+
+    if (length == 0)
+        length = 0xFFFF;
+
+    switch (code_reg & 0xF)
+    {
+    case 0x1:
+        mem_log("VDP", "DMA VRAM fill: address:%04x, increment:%04x, length:%d, value: %02x\n",
+            address_reg, REG15_DMA_INCREMENT, length, value);
+        VRAM[address_reg & 0xFFFF] = value;
+        do {
+            VRAM[(address_reg ^ 1) & 0xFFFF] = value >> 8;
+
+            address_reg += REG15_DMA_INCREMENT;
+        } while (--length);
+        break;
+    case 0x3:
+        assert(!"not implemented: DMA fille CRAM");
+        break;
+    case 0x5:
+        assert(!"not implemented: DMA fille VSRAM");
+        break;
+    default:
+        mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
     }
 }
 
