@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <stdint.h>
+#include <memory.h>
 extern "C" {
     #include "m68k/m68k.h"
     #include "Z80/Z80.h"
@@ -72,21 +73,21 @@ static void z80area_mem_w8(unsigned int address, unsigned int value)
 
 static unsigned int exp_mem_r8(unsigned int address)
 {
-    mem_log("MEM", "read8 from expansion area %04x\n", address);
+    mem_log("MEM", "read8 from expansion area %06x\n", address);
     return 0xFF;
 }
 static unsigned int exp_mem_r16(unsigned int address)
 {
-    mem_log("MEM", "read16 from expansion area %04x\n", address);
+    mem_log("MEM", "read16 from expansion area %06x\n", address);
     return m68k_read_memory_16(m68k_get_reg(NULL, M68K_REG_PC)) & 0xFF00;
 }
 static void exp_mem_w8(unsigned int address, unsigned int value)
 {
-    mem_log("MEM", "write8 from expansion area %04x: %04x\n", address, value);
+    mem_log("MEM", "write8 from expansion area %06x: %04x\n", address, value);
 }
 static void exp_mem_w16(unsigned int address, unsigned int value)
 {
-    mem_log("MEM", "write16 from expansion area %04x: %04x\n", address, value);
+    mem_log("MEM", "write16 from expansion area %06x: %04x\n", address, value);
 }
 
 /********************************************
@@ -95,6 +96,7 @@ static void exp_mem_w16(unsigned int address, unsigned int value)
 
 static unsigned int io_mem_r8(unsigned int address)
 {
+    address &= 0xFFFF;
     if (address < 0x20)
     {
         mem_log("MEM", "read8 from I/O area: %04x\n", address);
@@ -103,9 +105,13 @@ static unsigned int io_mem_r8(unsigned int address)
 
     if (address == 0x1100)
         return 0x00 | Z80_BUSREQ;
+    if (address == 0x1101)
+        return 0x00;
 
     if (address == 0x1200)
         return 0x00 | Z80_RESET;
+    if (address == 0x1201)
+        return 0x00;
 
     return exp_mem_r8(address);
 }
@@ -122,6 +128,7 @@ static void io_mem_w8(unsigned int address, unsigned int value)
 }
 static void io_mem_w16(unsigned int address, unsigned int value)
 {
+    address &= 0xFFFF;
     if (address < 0x20)
     {
         mem_log("MEM", "write16 to I/O area %04x: %04x\n", address, value);
@@ -214,8 +221,8 @@ unsigned int m68k_read_memory(unsigned int address)
             return *((TYPE*)t + (address & 0xFFFF));
         }
         if (sizeof(TYPE) == 2)
-            return GET_MEMFUNC_PAIR(t)->read16(address & 0xFFFF);
-        return GET_MEMFUNC_PAIR(t)->read8(address & 0xFFFF);
+            return GET_MEMFUNC_PAIR(t)->read16(address);
+        return GET_MEMFUNC_PAIR(t)->read8(address);
     }
     mem_log("MEM", "unknown read%ld at %06x\n", sizeof(TYPE)*8, address);
     return 0xFFFFFFFF & ((1L<<(sizeof(TYPE)*8)) - 1);
@@ -235,9 +242,9 @@ void m68k_write_memory(unsigned int address, unsigned int value)
             return;
         }
         if (sizeof(TYPE) == 2)
-           GET_MEMFUNC_PAIR(t)->write16(address & 0xFFFF, value);
+           GET_MEMFUNC_PAIR(t)->write16(address, value);
         else
-           GET_MEMFUNC_PAIR(t)->write8(address & 0xFFFF, value);
+           GET_MEMFUNC_PAIR(t)->write8(address, value);
         return;
     }
     mem_log("MEM", "unknown write%ld at %06x: %0*x\n",
@@ -321,7 +328,13 @@ int load_rom(const char *fn)
     fseek(f, 0, SEEK_END);
     int len = ftell(f);
     fseek(f, 0, SEEK_SET);
+
+    // Round up len to 16bit
+    if (len & 0xFFFF)
+        len = (len | 0xFFFF) + 1;
+
     ROM = (uint8_t*)malloc(len);
+    memset(ROM, 0xFF, len);
     fread(ROM, 1, len, f);
     fclose(f);
     return len;
