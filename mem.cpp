@@ -13,6 +13,10 @@ extern "C" {
 uint8_t *ROM;
 uint8_t RAM[0x10000];
 uint8_t ZRAM[0x2000];
+int Z80_BUSREQ;
+int Z80_RESET;
+int Z80_BANK;
+extern Z80 z80;
 
 inline uint16_t SWAP16(uint16_t a) {
     return (a >> 8) | (a << 8);
@@ -96,12 +100,11 @@ static unsigned int io_mem_r8(unsigned int address)
         return 0xFF;
     }
 
-    if (address == 0x1100 || address == 0x1200)
-    {
-        /* special */
-        mem_log("MEM", "read8 from I/O special: %04x\n", address);
-        return 0x00;
-    }
+    if (address == 0x1100)
+        return 0x00 | Z80_BUSREQ;
+
+    if (address == 0x1200)
+        return 0x00 | Z80_RESET;
 
     return exp_mem_r8(address);
 }
@@ -124,7 +127,58 @@ static void io_mem_w16(unsigned int address, unsigned int value)
         return;
     }
 
+    if (address == 0x1100)
+    {
+        int oldreset = Z80_RESET;
+        Z80_RESET = (value >> 8) & 1;
+        if (!oldreset && Z80_RESET)
+        {
+            // 0->1 transition: reset the Z80
+            ResetZ80(&z80);
+            mem_log("Z80", "reset triggered\n");
+        }
+        return;
+    }
+
     exp_mem_w16(address, value);
+}
+
+/********************************************
+ * Z80 Bank
+ ********************************************/
+
+unsigned int zbankreg_mem_r8(unsigned int address)
+{
+    return 0xFF;
+}
+
+void zbankreg_mem_w8(unsigned int address, unsigned int value)
+{
+    address &= 0xFFF;
+    if (address < 0x100)
+    {
+        Z80_BANK >>= 1;
+        Z80_BANK |= (value & 1) << 8;
+        mem_log("Z80", "bank points to: %06x\n", Z80_BANK << 15);
+        return;
+    }
+}
+
+unsigned int zbank_mem_r8(unsigned int address)
+{
+    address &= 0x7FFF;
+    address |= (Z80_BANK << 15);
+
+    // mem_log("Z80", "bank read: %06x\n", address);
+    return m68k_read_memory_8(address);
+}
+void zbank_mem_w8(unsigned int address, unsigned int value)
+{
+    address &= 0x7FFF;
+    address |= (Z80_BANK << 15);
+
+    // mem_log("Z80", "bank write %06x: %02x\n", address, value);
+    m68k_write_memory_8(address, value);
 }
 
 
@@ -205,7 +259,7 @@ void WrZ80(register word Addr,register byte Value)
             *(uint8_t*)((uint8_t*)t + (Addr & 0xFFF)) = Value;
             return;
         }
-        GET_MEMFUNC_PAIR(t)->write8(Addr & 0xFFF, Value);
+        GET_MEMFUNC_PAIR(t)->write8(Addr, Value);
         return;
     }
     mem_log("Z80MEM", "unknown write at %04x: %02x\n", Addr, Value);
@@ -216,7 +270,7 @@ byte RdZ80(register word Addr)
     if (t) {
         if (!((unsigned long)t & 1))
             return *(uint8_t*)((uint8_t*)t + (Addr & 0xFFF));
-        return GET_MEMFUNC_PAIR(t)->read8(Addr & 0xFFF);
+        return GET_MEMFUNC_PAIR(t)->read8(Addr);
     }
     mem_log("Z80MEM", "unknown read at %04x\n", Addr);
     return 0xFF;
@@ -253,11 +307,12 @@ int load_rom(const char *fn)
     return len;
 }
 
-
 static memfunc_pair VDP = { vdp_mem_r8, vdp_mem_r16, vdp_mem_w8, vdp_mem_w16 };
 static memfunc_pair IO = { io_mem_r8, io_mem_r16, io_mem_w8, io_mem_w16 };
 static memfunc_pair EXP = { exp_mem_r8, exp_mem_r16, exp_mem_w8, exp_mem_w16 };
 static memfunc_pair Z80AREA = { z80area_mem_r8, z80area_mem_r16, z80area_mem_w8, z80area_mem_w16 };
+static memfunc_pair ZBANKREG = { zbankreg_mem_r8, NULL, zbankreg_mem_w8, NULL };
+static memfunc_pair ZBANK = { zbank_mem_r8, NULL, zbank_mem_w8, NULL };
 
 void mem_init(int romsize)
 {
@@ -279,6 +334,12 @@ void mem_init(int romsize)
     z80_memtable[0x1] = ZRAM + 0x1000;
     z80_memtable[0x2] = ZRAM;
     z80_memtable[0x3] = ZRAM + 0x1000;
+    z80_memtable[0x6] = MEMFUN_PAIR(&ZBANKREG);
+    for (int i=0x8;i<0x10;++i)
+        z80_memtable[i] = MEMFUN_PAIR(&ZBANK);
+
+    Z80_BUSREQ = 0;
+    Z80_RESET = 1;
 }
 
 void mem_log(const char *subs, const char *fmt, ...)
