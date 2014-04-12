@@ -15,12 +15,15 @@ private:
     uint8_t regs[0x20];
     uint16_t address_reg;
     uint8_t code_reg;
+    int vcounter;
     bool command_word_pending;
 
 private:
     void register_w(int reg, uint8_t value);
 
 public:
+    void scanline();
+    void reset();
     void control_port_w(uint16_t value);
     void data_port_w16(uint16_t value);
 
@@ -89,6 +92,26 @@ void VDP::control_port_w(uint16_t value)
     fprintf(stdout, "[VDP][PC=%06x](%04d) command word 1st: code:%02x addr:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg, address_reg);
 }
 
+void VDP::scanline()
+{
+    vcounter++;
+    if (vcounter == 262)
+        vcounter = 0;
+
+    if (vcounter == 224)   // vblank begin
+    {
+        if (regs[0x1] & (1<<5))
+            m68k_set_irq(M68K_IRQ_6);
+    }
+}
+
+void VDP::reset()
+{
+    command_word_pending = false;
+    address_reg = 0;
+    code_reg = 0;
+    vcounter = 0;
+}
 
 void vdp_mem_w8(unsigned int address, unsigned int value)
 {
@@ -135,3 +158,14 @@ unsigned int vdp_mem_r16(unsigned int address)
             return 0xFF;
     }
 }
+
+void vdp_scanline(void)
+{
+    VDP.scanline();
+}
+
+void vdp_init(void)
+{
+    VDP.reset();
+}
+

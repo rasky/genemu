@@ -1,4 +1,10 @@
 
+#define VDP_HZ           60
+#define VDP_SCANLINES   262
+
+void vdp_init(void);
+void vdp_scanline(void);
+
 void vdp_mem_w8(unsigned int address, unsigned int value);
 void vdp_mem_w16(unsigned int address, unsigned int value);
 

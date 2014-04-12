@@ -24,19 +24,26 @@ int main(int argc, char *argv[])
     mem_init(romsize);
 
     hw_init();
+    vdp_init();
     m68k_init();
     m68k_set_cpu_type(M68K_CPU_TYPE_68000);
     m68k_pulse_reset();
 
     while (hw_poll())
     {
-        m68k_execute(MAIN_CPU_FREQ / 60);
-
-        // Technically, BUSREQ would pause the Z80 on memory accesses,
-        // but we simplify by pausing it altogether
-        if (!Z80_BUSREQ && Z80_RESET)
+        for (int sl=0;sl<VDP_SCANLINES;++sl)
         {
-            ExecZ80(&z80, SLAVE_CPU_FREQ / 60);
+            m68k_execute(MAIN_CPU_FREQ / VDP_HZ / VDP_SCANLINES);
+
+            // Technically, BUSREQ would pause the Z80 on memory accesses,
+            // but we simplify by pausing it altogether
+            if (!Z80_BUSREQ && Z80_RESET)
+            {
+                ExecZ80(&z80, SLAVE_CPU_FREQ / VDP_HZ / VDP_SCANLINES);
+                IntZ80(&z80, INT_IRQ);
+            }
+
+            vdp_scanline();
         }
 
         uint8_t *screen;

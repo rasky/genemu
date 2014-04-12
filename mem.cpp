@@ -193,6 +193,7 @@ unsigned int ym2612_mem_r8(unsigned int address)
 void ym2612_mem_w8(unsigned int address, unsigned int value)
 {
     address &= 0x3;
+    mem_log("YM2612", "reg write %d: %02x\n", address, value);
     YM2612Write(address, value);
 }
 
@@ -361,7 +362,7 @@ void mem_init(int romsize)
         z80_memtable[i] = MEMFUN_PAIR(&ZBANK);
 
     Z80_BUSREQ = 0;
-    Z80_RESET = 1;
+    Z80_RESET = 0;
 
     YM2612Init();
     YM2612Config(9);
