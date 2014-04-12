@@ -6,6 +6,7 @@
 extern "C" {
     #include "m68k/m68k.h"
     #include "Z80/Z80.h"
+    #include "ym2612/ym2612.h"
 }
 #include "vdp.h"
 
@@ -181,6 +182,24 @@ void zbank_mem_w8(unsigned int address, unsigned int value)
     m68k_write_memory_8(address, value);
 }
 
+/********************************************
+ * YM2612
+ ********************************************/
+
+unsigned int ym2612_mem_r8(unsigned int address)
+{
+    return YM2612Read();
+}
+void ym2612_mem_w8(unsigned int address, unsigned int value)
+{
+    address &= 0x3;
+    YM2612Write(address, value);
+}
+
+
+/********************************************
+ * M68K memory access
+ ********************************************/
 
 template<class TYPE>
 unsigned int m68k_read_memory(unsigned int address)
@@ -313,6 +332,7 @@ static memfunc_pair EXP = { exp_mem_r8, exp_mem_r16, exp_mem_w8, exp_mem_w16 };
 static memfunc_pair Z80AREA = { z80area_mem_r8, z80area_mem_r16, z80area_mem_w8, z80area_mem_w16 };
 static memfunc_pair ZBANKREG = { zbankreg_mem_r8, NULL, zbankreg_mem_w8, NULL };
 static memfunc_pair ZBANK = { zbank_mem_r8, NULL, zbank_mem_w8, NULL };
+static memfunc_pair YM2612 = { ym2612_mem_r8, NULL, ym2612_mem_w8, NULL };
 
 void mem_init(int romsize)
 {
@@ -334,12 +354,18 @@ void mem_init(int romsize)
     z80_memtable[0x1] = ZRAM + 0x1000;
     z80_memtable[0x2] = ZRAM;
     z80_memtable[0x3] = ZRAM + 0x1000;
+    z80_memtable[0x4] = MEMFUN_PAIR(&YM2612);
+    z80_memtable[0x5] = MEMFUN_PAIR(&YM2612);
     z80_memtable[0x6] = MEMFUN_PAIR(&ZBANKREG);
     for (int i=0x8;i<0x10;++i)
         z80_memtable[i] = MEMFUN_PAIR(&ZBANK);
 
     Z80_BUSREQ = 0;
     Z80_RESET = 1;
+
+    YM2612Init();
+    YM2612Config(9);
+    YM2612ResetChip();
 }
 
 void mem_log(const char *subs, const char *fmt, ...)
