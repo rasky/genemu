@@ -80,17 +80,17 @@ void VDP::data_port_w16(uint16_t value)
     case 0x1:
         VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
         VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
-        address_reg += 2;
+        address_reg += REG15_DMA_INCREMENT;
         address_reg &= 0xFFFF;
         break;
     case 0x3:
         CRAM[(address_reg >> 1) & 0x3E] = value;
-        address_reg += 2;
+        address_reg += REG15_DMA_INCREMENT;
         address_reg &= 0x7F;
         break;
     case 0x5:
         VSRAM[(address_reg >> 1) & 0x3E] = value;
-        address_reg += 2;
+        address_reg += REG15_DMA_INCREMENT;
         address_reg &= 0x7F;
         break;
 
