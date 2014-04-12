@@ -246,6 +246,13 @@ void VDP::reset()
 void vdp_mem_w8(unsigned int address, unsigned int value)
 {
     switch (address & 0x1F) {
+        case 0x11:
+        case 0x13:
+        case 0x15:
+        case 0x17:
+            mem_log("SN76489", "write: %02x\n", value);
+            return;
+
         default:
             fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled write8 IO:%02x val:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F, value);
     }
