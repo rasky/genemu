@@ -189,6 +189,19 @@ void zbank_mem_w8(unsigned int address, unsigned int value)
     m68k_write_memory_8(address, value);
 }
 
+unsigned int zvdp_mem_r8(unsigned int address)
+{
+    if (address >= 0x7F00 && address < 0x7F20)
+        return vdp_mem_r8(address);
+    return 0xFF;
+}
+
+void zvdp_mem_w8(unsigned int address, unsigned int value)
+{
+    if (address >= 0x7F00 && address < 0x7F20)
+        vdp_mem_w8(address, value);
+}
+
 /********************************************
  * YM2612
  ********************************************/
@@ -340,12 +353,13 @@ int load_rom(const char *fn)
     return len;
 }
 
-static memfunc_pair VDP = { vdp_mem_r8, vdp_mem_r16, vdp_mem_w8, vdp_mem_w16 };
+static memfunc_pair MVDP = { vdp_mem_r8, vdp_mem_r16, vdp_mem_w8, vdp_mem_w16 };
 static memfunc_pair IO = { io_mem_r8, io_mem_r16, io_mem_w8, io_mem_w16 };
 static memfunc_pair EXP = { exp_mem_r8, exp_mem_r16, exp_mem_w8, exp_mem_w16 };
 static memfunc_pair Z80AREA = { z80area_mem_r8, z80area_mem_r16, z80area_mem_w8, z80area_mem_w16 };
 static memfunc_pair ZBANKREG = { zbankreg_mem_r8, NULL, zbankreg_mem_w8, NULL };
 static memfunc_pair ZBANK = { zbank_mem_r8, NULL, zbank_mem_w8, NULL };
+static memfunc_pair ZVDP = { zvdp_mem_r8, NULL, zvdp_mem_w8, NULL };
 static memfunc_pair YM2612 = { ym2612_mem_r8, NULL, ym2612_mem_w8, NULL };
 
 void mem_init(int romsize)
@@ -357,10 +371,10 @@ void mem_init(int romsize)
     m68k_memtable[0xA1] = MEMFUN_PAIR(&IO);
     for (int i=0xA2;i<0xC0;i++)
         m68k_memtable[i] = MEMFUN_PAIR(&EXP);
-    m68k_memtable[0xC0] = MEMFUN_PAIR(&VDP);
-    m68k_memtable[0xC8] = MEMFUN_PAIR(&VDP);
-    m68k_memtable[0xD0] = MEMFUN_PAIR(&VDP);
-    m68k_memtable[0xD8] = MEMFUN_PAIR(&VDP);
+    m68k_memtable[0xC0] = MEMFUN_PAIR(&MVDP);
+    m68k_memtable[0xC8] = MEMFUN_PAIR(&MVDP);
+    m68k_memtable[0xD0] = MEMFUN_PAIR(&MVDP);
+    m68k_memtable[0xD8] = MEMFUN_PAIR(&MVDP);
     for (int i=0xE0;i<0x100;++i)
         m68k_memtable[i] = RAM;
 
@@ -371,6 +385,7 @@ void mem_init(int romsize)
     z80_memtable[0x4] = MEMFUN_PAIR(&YM2612);
     z80_memtable[0x5] = MEMFUN_PAIR(&YM2612);
     z80_memtable[0x6] = MEMFUN_PAIR(&ZBANKREG);
+    z80_memtable[0x7] = MEMFUN_PAIR(&ZVDP);
     for (int i=0x8;i<0x10;++i)
         z80_memtable[i] = MEMFUN_PAIR(&ZBANK);
 
