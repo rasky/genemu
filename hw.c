@@ -28,14 +28,14 @@ void hw_init(void)
     }
     atexit(SDL_Quit);
 
-    screen=SDL_SetVideoMode(256, 224, 32, SDL_DOUBLEBUF);
+    screen=SDL_SetVideoMode(320, 224, 32, SDL_DOUBLEBUF);
     if (screen == NULL)
     {
        printf("Unable to set video mode: %s\n", SDL_GetError());
        exit(1);
     }
 
-    frame = SDL_CreateRGBSurface(SDL_SWSURFACE, 256, 224, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0x0);
+    frame = SDL_CreateRGBSurface(SDL_SWSURFACE, 320, 224, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0x0);
     SDL_initFramerate(&fps);
     SDL_setFramerate(&fps, 100);
 

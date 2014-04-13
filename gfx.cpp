@@ -9,8 +9,8 @@ private:
     uint8_t stencil[320];
 
     void draw_nametable(uint8_t *screen, uint8_t *nt, int paty);
-    void draw_planea(uint8_t *screen, int y);
-    void draw_planew(uint8_t *screen, int y);
+    void draw_plane_ab(uint8_t *screen, int ntaddr, int y);
+    void draw_plane_w(uint8_t *screen, int y);
 
 public:
     void draw_scanline(uint8_t *screen, int line);
@@ -26,7 +26,7 @@ void GFX::draw_nametable(uint8_t *screen, uint8_t *nt, int paty)
 {
     int i,x;
 
-    for (i = 0; i < 32; ++i)
+    for (i = 0; i < 40; ++i)
     {
         uint16_t wnt = (nt[0] << 8) | nt[1];
         int pat_idx = BITS(wnt, 0, 11);
@@ -73,18 +73,17 @@ void GFX::draw_nametable(uint8_t *screen, uint8_t *nt, int paty)
     }
 }
 
-void GFX::draw_planew(uint8_t *screen, int y)
+void GFX::draw_plane_w(uint8_t *screen, int y)
 {
     int addr_w = VDP.get_nametable_W();
     int row = y >> 3;
     int paty = y & 7;
 
-    draw_nametable(screen, VDP.VRAM + addr_w + row*(2*32), paty);
+    draw_nametable(screen, VDP.VRAM + addr_w + row*(2*40), paty);
 }
 
-void GFX::draw_planea(uint8_t *screen, int y)
+void GFX::draw_plane_ab(uint8_t *screen, int ntaddr, int y)
 {
-    int addr_a = VDP.get_nametable_A();
     int row = y >> 3;
     int paty = y & 7;
     int ntwidth = BITS(VDP.regs[16], 0, 2);
@@ -96,7 +95,7 @@ void GFX::draw_planea(uint8_t *screen, int y)
     ntwidth  = (ntwidth + 1) * 32;
     ntheight = (ntheight + 1) * 32;
 
-    draw_nametable(screen, VDP.VRAM + addr_a + row*(2*ntwidth), paty);
+    draw_nametable(screen, VDP.VRAM + ntaddr + row*(2*ntwidth), paty);
 }
 
 void GFX::draw_scanline(uint8_t *screen, int line)
@@ -135,18 +134,20 @@ void GFX::draw_scanline(uint8_t *screen, int line)
         if (winvdown && line >= winv*8)
         {
             assert(!"winv down scroll");
-            draw_planew(screen, line);
+            draw_plane_w(screen, line);
             linew = true;
         }
         else if (!winvdown && line <= winv*8)
         {
-            draw_planew(screen, line);
+            draw_plane_w(screen, line);
             linew = true;
         }
     }
 
-    // if (!linew)
-    //     draw_planea(screen, line);
+    if (!linew)
+        draw_plane_ab(screen, VDP.get_nametable_A(), line);
+
+    draw_plane_ab(screen, VDP.get_nametable_B(), line);
 }
 
 void gfx_draw_scanline(uint8_t *screen, int line)
