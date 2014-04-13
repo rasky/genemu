@@ -84,12 +84,12 @@ void VDP::data_port_w16(uint16_t value)
         address_reg &= 0xFFFF;
         break;
     case 0x3:
-        CRAM[(address_reg >> 1) & 0x3E] = value;
+        CRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
         address_reg &= 0x7F;
         break;
     case 0x5:
-        VSRAM[(address_reg >> 1) & 0x3E] = value;
+        VSRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
         address_reg &= 0x7F;
         break;
@@ -266,7 +266,7 @@ void VDP::dma_m68k()
             src_addr += 2;
             assert(src_addr < 0x01000000);
             assert(address_reg < 0x80);
-            CRAM[(address_reg >> 1) & 0x3E] = value;
+            CRAM[(address_reg >> 1) & 0x3F] = value;
             address_reg += REG15_DMA_INCREMENT;
         } while (--length);
         break;
