@@ -220,7 +220,7 @@ void VDP::dma_fill(uint16_t value)
     switch (code_reg & 0xF)
     {
     case 0x1:
-        mem_log("VDP", "DMA VRAM fill: address:%04x, increment:%04x, length:%d, value: %04x\n",
+        mem_log("VDP", "DMA VRAM fill: address:%04x, increment:%04x, length:%x, value: %04x\n",
             address_reg, REG15_DMA_INCREMENT, length, value);
         VRAM[address_reg & 0xFFFF] = value & 0xFF;
         do {
@@ -247,7 +247,7 @@ void VDP::dma_m68k()
     switch (code_reg & 0xF)
     {
     case 0x1:
-        mem_log("VDP", "DMA M68K->VRAM: src_addr:%06x dst_addr:%x length:%d increment:%d\n",
+        mem_log("VDP", "DMA M68K->VRAM: src_addr:%06x dst_addr:%x length:%x increment:%d\n",
             src_addr, address_reg, length, REG15_DMA_INCREMENT);
         do {
             int value = m68k_read_memory_16(src_addr);
@@ -259,7 +259,7 @@ void VDP::dma_m68k()
         } while (--length);
         break;
     case 0x3:
-        mem_log("VDP", "DMA M68K->CRAM: src_addr:%06x dst_addr:%x length:%d increment:%d\n",
+        mem_log("VDP", "DMA M68K->CRAM: src_addr:%06x dst_addr:%x length:%x increment:%d\n",
             src_addr, address_reg, length, REG15_DMA_INCREMENT);
         do {
             int value = m68k_read_memory_16(src_addr);
