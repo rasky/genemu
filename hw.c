@@ -28,14 +28,14 @@ void hw_init(void)
     }
     atexit(SDL_Quit);
 
-    screen=SDL_SetVideoMode(288+224+SPLIT, 288, 32, SDL_DOUBLEBUF);
+    screen=SDL_SetVideoMode(256, 224, 32, SDL_DOUBLEBUF);
     if (screen == NULL)
     {
        printf("Unable to set video mode: %s\n", SDL_GetError());
        exit(1);
     }
 
-    frame = SDL_CreateRGBSurface(SDL_SWSURFACE, 36*8, 28*8, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0x0);
+    frame = SDL_CreateRGBSurface(SDL_SWSURFACE, 256, 224, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0x0);
     SDL_initFramerate(&fps);
     SDL_setFramerate(&fps, 100);
 
@@ -88,46 +88,8 @@ void hw_beginframe(uint8_t **screen, int *pitch)
 
 void hw_endframe(void)
 {
-    SDL_LockSurface(screen);
-
-    uint8_t *spixels = screen->pixels;
-    uint8_t *fpixels = frame->pixels;
-    int x,y;
-    for (y=0;y<224;y++)
-    {
-        int ry = 223-y;
-        uint8_t *framerow = fpixels + ry*frame->pitch;
-        for (x=0;x<288;x++)
-        {
-            int sx = 288+SPLIT+y;
-            int sy = x;
-
-#if ARGB
-            spixels[sy*screen->pitch + sx*4+1] = framerow[x*4];
-            spixels[sy*screen->pitch + sx*4+2] = framerow[x*4+1];
-            spixels[sy*screen->pitch + sx*4+3] = framerow[x*4+2];
-            spixels[sy*screen->pitch + sx*4+0] = 0;
-
-            spixels[ry*screen->pitch + x*4+1] = framerow[x*4];
-            spixels[ry*screen->pitch + x*4+2] = framerow[x*4+1];
-            spixels[ry*screen->pitch + x*4+3] = framerow[x*4+2];
-            spixels[ry*screen->pitch + x*4+0] = 0;
-#else
-            spixels[sy*screen->pitch + sx*4+0] = framerow[x*4];
-            spixels[sy*screen->pitch + sx*4+1] = framerow[x*4+1];
-            spixels[sy*screen->pitch + sx*4+2] = framerow[x*4+2];
-            spixels[sy*screen->pitch + sx*4+3] = 0;
-
-            spixels[ry*screen->pitch + x*4+0] = framerow[x*4+0];
-            spixels[ry*screen->pitch + x*4+1] = framerow[x*4+1];
-            spixels[ry*screen->pitch + x*4+2] = framerow[x*4+2];
-            spixels[ry*screen->pitch + x*4+3] = 0;
-#endif
-        }
-    }
-
     SDL_UnlockSurface(frame);
-    SDL_UnlockSurface(screen);
+    SDL_BlitSurface(frame, NULL, screen, NULL);
 
     if (!frameclock || SDL_GetTicks() < frameclock)
     {
