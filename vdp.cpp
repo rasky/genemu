@@ -253,8 +253,8 @@ void VDP::dma_m68k()
             int value = m68k_read_memory_16(src_addr);
             src_addr += 2;
             assert(src_addr < 0x01000000);
-            VRAM[(address_reg    ) & 0xFFFF] = value & 0xFF;
-            VRAM[(address_reg ^ 1) & 0xFFFF] = value >> 8;
+            VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
+            VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
             address_reg += REG15_DMA_INCREMENT;
         } while (--length);
         break;
