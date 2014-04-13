@@ -2,50 +2,23 @@
 #include <stdint.h>
 #include <assert.h>
 #include "vdp.h"
+#include "gfx.h"
 #include "mem.h"
 extern "C" {
     #include "m68k/m68k.h"
 }
 extern int framecounter;
 
-#define BIT(v, idx)       (((v) >> (idx)) & 1)
-#define BITS(v, idx, n)   (((v) >> (idx)) & ((1<<(n))-1))
-
 #define REG1_DMA_ENABLED      BIT(regs[1], 4)
+#define REG2_NAMETABLE_A      (BITS(regs[2], 3, 3) << 13)
+#define REG3_NAMETABLE_W      (BITS(regs[3], 1, 5) << 11)
+#define REG4_NAMETABLE_B      (BITS(regs[4], 0, 3) << 13)
 #define REG15_DMA_INCREMENT   regs[15]
 #define REG19_DMA_LENGTH      (regs[19] | (regs[20] << 8))
 #define REG21_DMA_SRC_ADDRESS ((regs[21] | (regs[22] << 8) | ((regs[23] & 0x7F) << 16)) << 1)
 #define REG23_DMA_TYPE        BITS(regs[23], 6, 2)
 
-class VDP
-{
-private:
-    uint8_t VRAM[0x10000];
-    uint16_t CRAM[0x40];
-    uint16_t VSRAM[0x40];  // only 40 words are really used
-    uint8_t regs[0x20];
-    uint16_t address_reg;
-    uint8_t code_reg;
-    uint16_t status_reg;
-    int vcounter;
-    bool command_word_pending;
-    bool dma_fill_pending;
-
-private:
-    void register_w(int reg, uint8_t value);
-    int hcounter();
-    void dma_trigger();
-    void dma_fill(uint16_t value);
-    void dma_m68k();
-
-public:
-    void scanline();
-    void reset();
-    uint16_t status_register_r();
-    void control_port_w(uint16_t value);
-    void data_port_w16(uint16_t value);
-
-} VDP;
+class VDP VDP;
 
 int VDP::hcounter(void)
 {
@@ -168,7 +141,7 @@ uint16_t VDP::status_register_r(void)
     return status;
 }
 
-void VDP::scanline()
+void VDP::scanline(uint8_t* screen)
 {
     vcounter++;
     if (vcounter == 262)
@@ -179,6 +152,8 @@ void VDP::scanline()
         if (regs[0x1] & (1<<5))
             m68k_set_irq(M68K_IRQ_6);
     }
+
+    gfx_draw_scanline(screen, vcounter);
 }
 
 /**************************************************************
@@ -278,6 +253,9 @@ void VDP::dma_m68k()
     }
 }
 
+int VDP::get_nametable_A() { return REG2_NAMETABLE_A; }
+int VDP::get_nametable_W() { return REG3_NAMETABLE_W; }
+int VDP::get_nametable_B() { return REG4_NAMETABLE_B; }
 
 void VDP::reset()
 {
@@ -338,9 +316,9 @@ unsigned int vdp_mem_r16(unsigned int address)
     }
 }
 
-void vdp_scanline(void)
+void vdp_scanline(uint8_t *screen)
 {
-    VDP.scanline();
+    VDP.scanline(screen);
 }
 
 void vdp_init(void)

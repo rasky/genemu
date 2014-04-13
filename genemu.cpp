@@ -31,6 +31,10 @@ int main(int argc, char *argv[])
 
     while (hw_poll())
     {
+        uint8_t *screen;
+        int pitch;
+        hw_beginframe(&screen, &pitch);
+
         for (int sl=0;sl<VDP_SCANLINES;++sl)
         {
             m68k_execute(MAIN_CPU_FREQ / VDP_HZ / VDP_SCANLINES);
@@ -43,19 +47,15 @@ int main(int argc, char *argv[])
                 IntZ80(&z80, INT_IRQ);
             }
 
-            vdp_scanline();
+            vdp_scanline(screen);
+            screen += pitch;
         }
-
-        uint8_t *screen;
-        int pitch;
 
         int16_t *audio;
         hw_beginaudio(&audio);
         memset(audio, 0, HW_AUDIO_NUMSAMPLES*2);
         hw_endaudio();
 
-        hw_beginframe(&screen, &pitch);
-        //gfx_draw(screen, pitch);
         hw_endframe();
         ++framecounter;
     }
