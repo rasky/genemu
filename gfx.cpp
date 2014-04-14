@@ -8,6 +8,10 @@ class GFX
 private:
     uint8_t stencil[320];
 
+    void draw_pixel(uint8_t *screen, uint16_t rgb);
+    template <bool fliph>
+    void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette);
+    void draw_pattern(uint8_t *screen, uint16_t name, int paty);
     void draw_nametable(uint8_t *screen, uint8_t *nt, int paty);
     void draw_plane_ab(uint8_t *screen, int ntaddr, int y);
     void draw_plane_w(uint8_t *screen, int y);
@@ -22,54 +26,66 @@ public:
 #define CRAM_G(c)          COLOR_3B_TO_8B(BITS((c), 5, 3))
 #define CRAM_B(c)          COLOR_3B_TO_8B(BITS((c), 9, 3))
 
+
+inline void GFX::draw_pixel(uint8_t *screen, uint16_t rgb)
+{
+    screen[0] = CRAM_R(rgb);
+    screen[1] = CRAM_G(rgb);
+    screen[2] = CRAM_B(rgb);
+}
+
+template <bool fliph>
+void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette)
+{
+    if (fliph)
+        pattern += 3;
+
+    for (int x = 0; x < 4; ++x)
+    {
+        uint8_t pix = *pattern;
+        uint8_t pix1 = !fliph ? pix>>4 : pix&0xF;
+        uint8_t pix2 = !fliph ? pix&0xF : pix>>4;
+
+        if (pix1) draw_pixel(screen+0, palette[pix1]);
+        if (pix2) draw_pixel(screen+4, palette[pix2]);
+
+        if (fliph)
+            pattern--;
+        else
+            pattern++;
+        screen += 8;
+    }
+}
+
+void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty)
+{
+    int pat_idx = BITS(name, 0, 11);
+    int pat_fliph = BITS(name, 11, 1);
+    int pat_flipv = BITS(name, 12, 1);
+    int pat_palette = BITS(name, 13, 2);
+    int pat_pri = BITS(name, 15, 1);
+    uint8_t *pattern = VDP.VRAM + pat_idx * 32;
+    uint16_t *palette = VDP.CRAM + pat_palette * 16;
+
+    if (!pat_flipv)
+        pattern += paty*4;
+    else
+        pattern += (7-paty)*4;
+
+    if (!pat_fliph)
+        draw_pattern<false>(screen, pattern, palette);
+    else
+        draw_pattern<true>(screen, pattern, palette);
+}
+
+
 void GFX::draw_nametable(uint8_t *screen, uint8_t *nt, int paty)
 {
-    int i,x;
-
-    for (i = 0; i < 40; ++i)
+    for (int i = 0; i < 40; ++i)
     {
-        uint16_t wnt = (nt[0] << 8) | nt[1];
-        int pat_idx = BITS(wnt, 0, 11);
-        int pat_fliph = BITS(wnt, 11, 1);
-        int pat_flipv = BITS(wnt, 12, 1);
-        int pat_palette = BITS(wnt, 13, 2);
-        int pat_pri = BITS(wnt, 15, 1);
-        uint8_t *pattern = VDP.VRAM + pat_idx * 32;
-        uint16_t *palette = VDP.CRAM + pat_palette * 16;
-
-        assert(!pat_fliph);
-
-        if (!pat_flipv)
-            pattern += paty*4;
-        else
-            pattern += (7-paty)*4;
-
-        for (x = 0; x < 4; x++)
-        {
-            uint8_t pix = pattern[x];
-
-            if (pix >> 4)
-            {
-                uint16_t rgb = palette[pix >> 4];
-                screen[0] = CRAM_R(rgb);
-                screen[1] = CRAM_G(rgb);
-                screen[2] = CRAM_B(rgb);
-                screen[3] = 0;
-            }
-            screen += 4;
-
-            if (pix & 0xF)
-            {
-                uint16_t rgb = palette[pix & 0xF];
-                screen[0] = CRAM_R(rgb);
-                screen[1] = CRAM_G(rgb);
-                screen[2] = CRAM_B(rgb);
-                screen[3] = 0;
-            }
-            screen += 4;
-        }
-
+        draw_pattern(screen, (nt[0] << 8) | nt[1], paty);
         nt += 2;
+        screen += 32;
     }
 }
 
