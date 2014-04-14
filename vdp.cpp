@@ -261,7 +261,14 @@ void VDP::dma_m68k()
         } while (--length);
         break;
     case 0x5:
-        assert(!"not implemented: DMA m68k copy VSRAM");
+        do {
+            int value = m68k_read_memory_16(src_addr);
+            src_addr += 2;
+            assert(src_addr < 0x01000000);
+            assert(address_reg < 0x80);
+            VSRAM[(address_reg >> 1) & 0x3F] = value;
+            address_reg += REG15_DMA_INCREMENT;
+        } while (--length);
         break;
     default:
         mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
