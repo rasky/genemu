@@ -291,6 +291,15 @@ unsigned int  m68k_read_memory_32(unsigned int address)
 {
     return (m68k_read_memory<uint16_t>(address) << 16) | m68k_read_memory<uint16_t>(address+2);
 }
+unsigned int  m68k_read_disassembler_16(unsigned int address)
+{
+    return m68k_read_memory_16(address);
+}
+unsigned int  m68k_read_disassembler_32(unsigned int address)
+{
+    return m68k_read_memory_32(address);
+}
+
 
 void m68k_write_memory_8(unsigned int address, unsigned int value)
 {

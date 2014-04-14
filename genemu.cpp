@@ -14,6 +14,7 @@ Z80 z80;
 
 int framecounter;
 
+
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
@@ -23,6 +24,20 @@ int main(int argc, char *argv[])
 
     int romsize = load_rom(argv[1]);
     mem_init(romsize);
+
+#if 0
+    char buf[256];
+    int pc = 0;
+    strcpy(buf, argv[1]);
+    strcat(buf, ".asm");
+    FILE *f = fopen(buf, "w");
+    while (pc < romsize) {
+        int oplen = m68k_disassemble(buf, pc, M68K_CPU_TYPE_68000);
+        fprintf(f, "%06x\t%s\n", pc, buf);
+        pc += oplen;
+    }
+    fclose(f);
+#endif
 
     hw_init();
     vdp_init();
