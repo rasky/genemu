@@ -16,7 +16,7 @@ private:
     void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette);
     void draw_pattern(uint8_t *screen, uint16_t name, int paty);
     void draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty);
-    void draw_plane_ab(uint8_t *screen, int ntaddr, int hs, int y);
+    void draw_plane_ab(uint8_t *screen, int line, int ntaddr, int hs, int vs);
     void draw_plane_w(uint8_t *screen, int y);
     void draw_sprites(uint8_t *screen, int line);
 
@@ -104,10 +104,8 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
     draw_nametable(screen, VDP.VRAM + addr_w + row*(2*40), SCREEN_WIDTH/8, paty);
 }
 
-void GFX::draw_plane_ab(uint8_t *screen, int ntaddr, int scrollx, int scrolly)
+void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, int scrollx, int scrolly)
 {
-    int row = scrolly >> 3;
-    int paty = scrolly & 7;
     int ntwidth = BITS(VDP.regs[16], 0, 2);
     int ntheight = BITS(VDP.regs[16], 4, 2);
     int screen_cols = SCREEN_WIDTH / 8;
@@ -119,6 +117,11 @@ void GFX::draw_plane_ab(uint8_t *screen, int ntaddr, int scrollx, int scrolly)
     ntheight = (ntheight + 1) * 32;
 
     scrollx %= ntwidth*8;
+    scrolly += line;
+    scrolly %= ntheight*8;
+
+    int row = scrolly >> 3;
+    int paty = scrolly & 7;
 
     if (scrollx < SCREEN_WIDTH)
     {
@@ -252,6 +255,9 @@ void GFX::draw_scanline(uint8_t *screen, int line)
         f=fopen("cram.dmp", "wb");
         fwrite(VDP.CRAM, 1, 64*2, f);
         fclose(f);
+        f=fopen("vsram.dmp", "wb");
+        fwrite(VDP.VSRAM, 1, 64*2, f);
+        fclose(f);
     }
 
     // Display enable
@@ -272,8 +278,15 @@ void GFX::draw_scanline(uint8_t *screen, int line)
     int hsa, hsb;
     get_hscroll(line, &hsa, &hsb);
 
+    if (BIT(VDP.regs[11], 2))
+        assert(!"vertical scrolling per column");
+
+    int vsa, vsb;
+    vsa = VDP.VSRAM[0] & 0x3FF;
+    vsb = VDP.VSRAM[1] & 0x3FF;
+
     // Plane B
-    draw_plane_ab(screen, VDP.get_nametable_B(), hsb, line);
+    draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, vsb);
 
     // Plane A or W
     linew = false;
@@ -292,7 +305,7 @@ void GFX::draw_scanline(uint8_t *screen, int line)
     }
 
     if (!linew)
-        draw_plane_ab(screen, VDP.get_nametable_A(), hsa, line);
+        draw_plane_ab(screen, line, VDP.get_nametable_A(), hsa, vsa);
 
     // Sprites
     draw_sprites(screen, line);
