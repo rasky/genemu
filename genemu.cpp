@@ -43,8 +43,9 @@ int main(int argc, char *argv[])
             // but we simplify by pausing it altogether
             if (!Z80_BUSREQ && Z80_RESET)
             {
+                if (sl == 0xE0)
+                    IntZ80(&z80, INT_IRQ);
                 ExecZ80(&z80, SLAVE_CPU_FREQ / VDP_HZ / VDP_SCANLINES);
-                IntZ80(&z80, INT_IRQ);
             }
 
             vdp_scanline(screen);
