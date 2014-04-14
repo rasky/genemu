@@ -9,7 +9,7 @@
 static SDL_Surface *screen;
 static SDL_Surface *frame;
 static FPSmanager fps;
-static int16_t AUDIO_BUF[HW_AUDIO_NUMBUFFERS][HW_AUDIO_NUMSAMPLES];
+static int16_t AUDIO_BUF[HW_AUDIO_NUMBUFFERS][HW_AUDIO_NUMSAMPLES*2];
 static int audio_buf_index_w=2, audio_buf_index_r=0;
 uint8_t *keystate;
 static clock_t frameclock;
@@ -44,7 +44,7 @@ void hw_init(void)
 
     wanted.freq = HW_AUDIO_FREQ;
     wanted.format = AUDIO_S16;
-    wanted.channels = 1;
+    wanted.channels = 2;
     wanted.samples = HW_AUDIO_NUMSAMPLES;
     wanted.callback = fill_audio;
     wanted.userdata = NULL;
