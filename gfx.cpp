@@ -170,13 +170,15 @@ void GFX::draw_sprites(uint8_t *screen, int line)
         int sy = ((table[0] & 0x3) << 8) | table[1];
         int sh = BITS(table[2], 0, 2) + 1;
         uint16_t name = (table[4] << 8) | table[5];
+        int flipv = BITS(name, 12, 1);
+        int fliph = BITS(name, 11, 1);
         int sw = BITS(table[2], 2, 2) + 1;
         int sx = ((table[6] & 0x3) << 8) | table[7];
 
         if (line == 0)
         {
-            // mem_log("SPRITE", "(sx:%d, sy:%d sz:%d,%d, name:%04x, link:%02x)\n",
-            //     sx, sy, sw,sh, name, link);
+            // mem_log("SPRITE", "(sx:%d, sy:%d sz:%d,%d, name:%04x)\n",
+            //      sx, sy, sw,sh, name);
         }
 
         sy -= 128;
@@ -187,16 +189,24 @@ void GFX::draw_sprites(uint8_t *screen, int line)
             int row = (line - sy) >> 3;
             int paty = (line - sy) & 7;
 
+            if (flipv)
+                row = sh - row - 1;
+
             if (sx > -sw*8 && sx < SCREEN_WIDTH)
             {
                 name += row;
+                if (fliph)
+                    name += sh*(sw-1);
                 for (int p=0;p<sw;p++)
                 {
                     draw_pattern(screen + (sx+p*8)*4, name, paty);
                     num_pixels += 8;
                     if (num_pixels >= 256)
                         return;
-                    name += sh;
+                    if (!fliph)
+                        name += sh;
+                    else
+                        name -= sh;
                 }
             }
 
