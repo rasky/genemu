@@ -97,6 +97,11 @@ static void exp_mem_w16(unsigned int address, unsigned int value)
 static unsigned int io_mem_r8(unsigned int address)
 {
     address &= 0xFFFF;
+
+    // Version register
+    if ((address & ~1) == 0x0)
+        return 0xA0;
+
     if (address < 0x20)
     {
         mem_log("MEM", "read8 from I/O area: %04x\n", address);
@@ -104,7 +109,10 @@ static unsigned int io_mem_r8(unsigned int address)
     }
 
     if (address == 0x1100)
-        return 0x00 | Z80_BUSREQ;
+    {
+        unsigned val = 0x00 | (~Z80_BUSREQ & 1);
+        return val;
+    }
     if (address == 0x1101)
         return 0x00;
 
@@ -136,6 +144,13 @@ static void io_mem_w16(unsigned int address, unsigned int value)
     }
 
     if (address == 0x1100)
+    {
+        value >>= 8;
+        Z80_BUSREQ = value & 1;
+        return;
+    }
+
+    if (address == 0x1200)
     {
         int oldreset = Z80_RESET;
         Z80_RESET = (value >> 8) & 1;
