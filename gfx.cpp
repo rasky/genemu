@@ -259,6 +259,7 @@ void GFX::draw_scanline(uint8_t *screen, int line)
     if (line >= 224)
         return;
 
+#if 0
     if (line == 0) {
         int addr_a = VDP.get_nametable_A();
         int addr_b = VDP.get_nametable_B();
@@ -277,6 +278,7 @@ void GFX::draw_scanline(uint8_t *screen, int line)
         fwrite(VDP.VSRAM, 1, 64*2, f);
         fclose(f);
     }
+#endif
 
     // Display enable
     memset(screen, 0, SCREEN_WIDTH*4);
