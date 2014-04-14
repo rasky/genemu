@@ -22,6 +22,7 @@ private:
     uint8_t code_reg;
     uint16_t status_reg;
     int vcounter;
+    int line_counter_interrupt;
     bool command_word_pending;
     bool dma_fill_pending;
 

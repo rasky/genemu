@@ -255,8 +255,6 @@ void GFX::draw_scanline(uint8_t *screen, int line)
 
     if (BITS(VDP.regs[12], 1, 2) != 0)
         assert(!"interlace mode");
-    if (BIT(VDP.regs[0], 4))
-        assert(!"horizontal interrupt");
 
     if (line >= 224)
         return;

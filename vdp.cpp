@@ -9,10 +9,13 @@ extern "C" {
 }
 extern int framecounter;
 
+#define REG0_LINE_INTERRUPT   BIT(regs[0], 4)
 #define REG1_DMA_ENABLED      BIT(regs[1], 4)
+#define REG1_VBLANK_INTERRUPT BIT(regs[1], 5)
 #define REG2_NAMETABLE_A      (BITS(regs[2], 3, 3) << 13)
 #define REG3_NAMETABLE_W      (BITS(regs[3], 1, 5) << 11)
 #define REG4_NAMETABLE_B      (BITS(regs[4], 0, 3) << 13)
+#define REG10_LINE_COUNTER    BITS(regs[10], 0, 8)
 #define REG15_DMA_INCREMENT   regs[15]
 #define REG19_DMA_LENGTH      (regs[19] | (regs[20] << 8))
 #define REG21_DMA_SRC_ADDRESS ((regs[21] | (regs[22] << 8) | ((regs[23] & 0x7F) << 16)) << 1)
@@ -147,11 +150,23 @@ void VDP::scanline(uint8_t* screen)
     if (vcounter == 262)
         vcounter = 0;
 
+    if (--line_counter_interrupt == 0)
+    {
+        if (REG0_LINE_INTERRUPT)
+            m68k_set_irq(M68K_IRQ_4);
+
+        line_counter_interrupt = REG10_LINE_COUNTER;
+    }
+
     if (vcounter == 224)   // vblank begin
     {
-        if (regs[0x1] & (1<<5))
+        if (REG1_VBLANK_INTERRUPT)
             m68k_set_irq(M68K_IRQ_6);
     }
+
+    // On these linese, the line counter interrupt is reloaded
+    if ((vcounter >= 225 && vcounter <= 261) || vcounter == 0)
+        line_counter_interrupt = REG10_LINE_COUNTER;
 
     gfx_draw_scanline(screen, vcounter);
 }
@@ -264,6 +279,7 @@ void VDP::reset()
     code_reg = 0;
     vcounter = 0;
     status_reg = 0x3C00;
+    line_counter_interrupt = 0;
 }
 
 void vdp_mem_w8(unsigned int address, unsigned int value)
