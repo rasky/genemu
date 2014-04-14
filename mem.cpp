@@ -353,7 +353,7 @@ byte InZ80(register word Port)
 
 void PatchZ80(register Z80 *R) {}
 
-int load_rom(const char *fn)
+int load_bin(const char *fn)
 {
     FILE *f = fopen(fn, "rb");
     if (!f)
@@ -376,6 +376,35 @@ int load_rom(const char *fn)
     fclose(f);
     return len;
 }
+
+int load_smd(const char *fn)
+{
+    FILE *f = fopen(fn, "rb");
+    if (!f)
+    {
+        fprintf(stderr, "cannot load ROM: %s\n", fn);
+        exit(1);
+    }
+
+    uint8_t nblocks;
+    fread(&nblocks, 1, 1, f);
+    fseek(f, 512, SEEK_SET);
+
+    ROM = (uint8_t*)malloc(nblocks * 16*1024);
+    uint8_t *buf = ROM;
+
+    for (int i=0;i<nblocks;++i)
+    {
+        for (int j=0;j<8*1024;++j)
+            buf[j*2+1] = fgetc(f);
+        for (int j=0;j<8*1024;++j)
+            buf[j*2+0] = fgetc(f);
+        buf += 16*1024;
+    }
+    fclose(f);
+    return nblocks*16*1024;
+}
+
 
 static memfunc_pair MVDP = { vdp_mem_r8, vdp_mem_r16, vdp_mem_w8, vdp_mem_w16 };
 static memfunc_pair IO = { io_mem_r8, io_mem_r16, io_mem_w8, io_mem_w16 };

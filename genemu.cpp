@@ -7,6 +7,7 @@ extern "C" {
 }
 #include "vdp.h"
 #include "mem.h"
+#include <string.h>
 
 #define MAIN_CPU_FREQ     7670000
 #define SLAVE_CPU_FREQ    (MAIN_CPU_FREQ/2)
@@ -22,7 +23,12 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    int romsize = load_rom(argv[1]);
+    int romsize;
+
+    if (strstr(argv[1], ".smd"))
+        romsize = load_smd(argv[1]);
+    else
+        romsize = load_bin(argv[1]);
     mem_init(romsize);
 
 #if 0
