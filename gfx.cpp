@@ -151,19 +151,66 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & 0x7F) << 9);
     int sidx;
     int ns;
+    int num_pixels;
 
-    sidx = 0;
-    for (ns = 0; ns < 64; ++ns)
+#if 0
+    if (line == 0)
+    {
+        sidx = 0;
+        for (int i = 0; i < 64; ++i)
+        {
+            uint8_t *table = start_table + sidx*8;
+            int sy = ((table[0] & 0x3) << 8) | table[1];
+            int sh = BITS(table[2], 0, 2) + 1;
+            uint16_t name = (table[4] << 8) | table[5];
+            int flipv = BITS(name, 12, 1);
+            int fliph = BITS(name, 11, 1);
+            int sw = BITS(table[2], 2, 2) + 1;
+            int sx = ((table[6] & 0x3) << 8) | table[7];
+            int link = BITS(table[3], 0, 7);
+
+            mem_log("SPRITE", "%d (sx:%d, sy:%d sz:%d,%d, name:%04x)\n",
+                    sidx, sx, sy, sw*8, sh*8, name);
+
+            if (link == 0) break;
+            sidx = link;
+        }
+    }
+#endif
+
+    sidx = 0; ns = 0; num_pixels = 0;
+    for (int i = 0; i < 64; ++i)
     {
         uint8_t *table = start_table + sidx*8;
+        int sy = ((table[0] & 0x3) << 8) | table[1];
+        int sh = BITS(table[2], 0, 2) + 1;
         int link = BITS(table[3], 0, 7);
+        int sw = BITS(table[2], 2, 2) + 1;
+        int sx = ((table[6] & 0x3) << 8) | table[7];
+
         if (link == 0) break;
-        indices[ns] = sidx;
+
+        // Sprite masking: a sprite with X=0 blocks other lower-priority
+        // sprites on the same line.
+        if (line == 0 && (sx == 0 || sx == 1))
+            mem_log("SPRITE", "Unimplemented: sprite masking\n");
+
+        sy -= 128;
+        if (line >= sy && line < sy+sh*8)
+        {
+            indices[ns++] = sidx;
+            num_pixels += sw*8;
+
+            // Sprite limits: stop drawing at 16 sprites or 256 pixels
+            if (ns >= 16 || num_pixels >= 256)
+                break;
+        }
+
         sidx = link;
     }
 
-    int num_visible = 0;
-    int num_pixels = 0;
+    assert(ns < 16);
+
     for (int i=ns-1;i>=0;i--)
     {
         uint8_t *table = start_table + indices[i]*8;
@@ -175,44 +222,30 @@ void GFX::draw_sprites(uint8_t *screen, int line)
         int sw = BITS(table[2], 2, 2) + 1;
         int sx = ((table[6] & 0x3) << 8) | table[7];
 
-        if (line == 0)
-        {
-            // mem_log("SPRITE", "(sx:%d, sy:%d sz:%d,%d, name:%04x)\n",
-            //      sx, sy, sw,sh, name);
-        }
-
         sy -= 128;
         sx -= 128;
 
-        if (line >= sy && line < sy+sh*8)
+        assert(line >= sy && line < sy+sh*8);
+
+        int row = (line - sy) >> 3;
+        int paty = (line - sy) & 7;
+
+        if (flipv)
+            row = sh - row - 1;
+
+        if (sx > -sw*8 && sx < SCREEN_WIDTH)
         {
-            int row = (line - sy) >> 3;
-            int paty = (line - sy) & 7;
-
-            if (flipv)
-                row = sh - row - 1;
-
-            if (sx > -sw*8 && sx < SCREEN_WIDTH)
+            name += row;
+            if (fliph)
+                name += sh*(sw-1);
+            for (int p=0;p<sw;p++)
             {
-                name += row;
-                if (fliph)
-                    name += sh*(sw-1);
-                for (int p=0;p<sw;p++)
-                {
-                    draw_pattern(screen + (sx+p*8)*4, name, paty);
-                    num_pixels += 8;
-                    if (num_pixels >= 256)
-                        return;
-                    if (!fliph)
-                        name += sh;
-                    else
-                        name -= sh;
-                }
+                draw_pattern(screen + (sx+p*8)*4, name, paty);
+                if (!fliph)
+                    name += sh;
+                else
+                    name -= sh;
             }
-
-            // Max 16 sprites per scanline
-            if (++num_visible >= 16)
-                return;
         }
     }
 }
