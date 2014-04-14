@@ -1993,7 +1993,7 @@ unsigned int YM2612Read(void)
 }
 
 /* Generate samples for ym2612 */
-void YM2612Update(int *buffer, int length)
+void YM2612Update(int16_t *buffer, int length)
 {
   int i;
   int lt,rt;

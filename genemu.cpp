@@ -3,6 +3,7 @@
 extern "C" {
     #include "m68k/m68k.h"
     #include "z80/Z80.h"
+    #include "ym2612/ym2612.h"
 }
 #include "vdp.h"
 #include "mem.h"
@@ -54,7 +55,7 @@ int main(int argc, char *argv[])
 
         int16_t *audio;
         hw_beginaudio(&audio);
-        memset(audio, 0, HW_AUDIO_NUMSAMPLES*2);
+        YM2612Update(audio, HW_AUDIO_NUMSAMPLES);
         hw_endaudio();
 
         hw_endframe();
