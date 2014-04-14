@@ -1,13 +1,14 @@
 #include "vdp.h"
 #include "mem.h"
 #include <assert.h>
+#include <memory.h>
 #include <stdio.h>
+
+#define SCREEN_WIDTH 320
 
 class GFX
 {
 private:
-    uint8_t stencil[320];
-
     void draw_pixel(uint8_t *screen, uint16_t rgb);
     template <bool fliph>
     void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette);
@@ -15,6 +16,7 @@ private:
     void draw_nametable(uint8_t *screen, uint8_t *nt, int paty);
     void draw_plane_ab(uint8_t *screen, int ntaddr, int y);
     void draw_plane_w(uint8_t *screen, int y);
+    void draw_sprites(uint8_t *screen, int line);
 
 public:
     void draw_scanline(uint8_t *screen, int line);
@@ -114,6 +116,55 @@ void GFX::draw_plane_ab(uint8_t *screen, int ntaddr, int y)
     draw_nametable(screen, VDP.VRAM + ntaddr + row*(2*ntwidth), paty);
 }
 
+void GFX::draw_sprites(uint8_t *screen, int line)
+{
+    uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & 0x7F) << 9);
+    int sidx = 0;
+    int num_visible = 0;
+    int num_pixels = 0;
+
+    for (int ns = 0; ns < 64; ++ns)
+    {
+        uint8_t *table = start_table + sidx*8;
+        int sy = ((table[0] & 0x3) << 8) | table[1];
+        int sh = BITS(table[2], 0, 2) + 1;
+        uint16_t name = (table[4] << 8) | table[5];
+        int sw = BITS(table[2], 2, 2) + 1;
+        int sx = ((table[6] & 0x3) << 8) | table[7];
+        int link = BITS(table[3], 0, 7);
+
+        sy -= 128;
+        sx -= 128;
+
+        if (line >= sy && line < sy+sh*8)
+        {
+            int row = (line - sy) >> 3;
+            int paty = (line - sy) & 7;
+
+            name += row;
+            if (sx > -sw*8 && sx < SCREEN_WIDTH)
+            {
+                for (int p=0;p<sw;p++)
+                {
+                    draw_pattern(screen + (sx+p*8)*4, name, paty);
+                    num_pixels += 8;
+                    if (num_pixels >= 256)
+                        return;
+                    name += sw;
+                }
+            }
+
+            // Max 16 sprites per scanline
+            if (++num_visible >= 16)
+                return;
+        }
+
+        if (!link) break;
+        sidx = link;
+    }
+
+}
+
 void GFX::draw_scanline(uint8_t *screen, int line)
 {
     int winh = VDP.regs[17] & 0x1F;
@@ -145,6 +196,21 @@ void GFX::draw_scanline(uint8_t *screen, int line)
         fclose(f);
     }
 
+    // Display enable
+    if (BIT(VDP.regs[0], 0))
+    {
+        memset(screen, 0, SCREEN_WIDTH*4);
+        return;
+    }
+
+    uint16_t backdrop_color = VDP.CRAM[BITS(VDP.regs[7], 0, 6)];
+    for (int x=0;x<SCREEN_WIDTH;x++)
+        draw_pixel(screen + x*4, backdrop_color);
+
+    // Plaen/sprite disable, show only backdrop
+    if (!BIT(VDP.regs[1], 6))
+        return;
+
     linew = false;
     if (winv) {
         if (winvdown && line >= winv*8)
@@ -164,9 +230,13 @@ void GFX::draw_scanline(uint8_t *screen, int line)
         draw_plane_ab(screen, VDP.get_nametable_A(), line);
 
     draw_plane_ab(screen, VDP.get_nametable_B(), line);
+
+    draw_sprites(screen, line);
 }
 
 void gfx_draw_scanline(uint8_t *screen, int line)
 {
-    GFX.draw_scanline(screen, line);
+    uint8_t buffer[(SCREEN_WIDTH+32+32)*4];
+    GFX.draw_scanline(buffer+32*4, line);
+    memcpy(screen, buffer+32*4, SCREEN_WIDTH*4);
 }
