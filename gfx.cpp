@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <memory.h>
 #include <stdio.h>
+#include <SDL.h>
 
 #define SCREEN_WIDTH 320
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -292,12 +293,16 @@ void GFX::draw_scanline(uint8_t *screen, int line)
     if (line >= 224)
         return;
 
-#if 0
+#if 1
+    uint8_t *keystate = SDL_GetKeyState(NULL);
+#endif
+
+#if 1
     if (line == 0) {
         int addr_a = VDP.get_nametable_A();
         int addr_b = VDP.get_nametable_B();
         int addr_w = VDP.get_nametable_W();
-        mem_log("GFX", "A(addr:%04x) B(addr:%04x) W(addr:%04x)\n", addr_a, addr_b, addr_w);
+        mem_log("GFX", "A(addr:%04x) B(addr:%04x) W(addr:%04x) SPR(addr:%04x)\n", addr_a, addr_b, addr_w, ((VDP.regs[5] & 0x7F) << 9));
         mem_log("GFX", "W(h:%d, right:%d, v:%d, down:%d\n)", winh, winhright, winv, winvdown);
 
         FILE *f;
@@ -320,7 +325,10 @@ void GFX::draw_scanline(uint8_t *screen, int line)
 
     uint16_t backdrop_color = VDP.CRAM[BITS(VDP.regs[7], 0, 6)];
     for (int x=0;x<SCREEN_WIDTH;x++)
+    {
+        screen[x*4+3] = 0;
         draw_pixel(screen + x*4, backdrop_color, 0);
+    }
 
     // Plaen/sprite disable, show only backdrop
     if (!BIT(VDP.regs[1], 6))
@@ -337,7 +345,8 @@ void GFX::draw_scanline(uint8_t *screen, int line)
     vsb = VDP.VSRAM[1] & 0x3FF;
 
     // Plane B
-    draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, vsb);
+    if (!keystate[SDLK_b])
+        draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, vsb);
 
     // Plane A or W
     linew = false;
@@ -345,21 +354,23 @@ void GFX::draw_scanline(uint8_t *screen, int line)
         if (winvdown && line >= winv*8)
         {
             assert(!"winv down scroll");
-            draw_plane_w(screen, line);
             linew = true;
         }
         else if (!winvdown && line <= winv*8)
         {
-            draw_plane_w(screen, line);
             linew = true;
         }
     }
 
-    if (!linew)
+    if (!linew && !keystate[SDLK_a])
         draw_plane_ab(screen, line, VDP.get_nametable_A(), hsa, vsa);
 
     // Sprites
-    draw_sprites(screen, line);
+    if (!keystate[SDLK_s])
+        draw_sprites(screen, line);
+
+    if (linew && !keystate[SDLK_w])
+        draw_plane_w(screen, line);
 }
 
 void gfx_draw_scanline(uint8_t *screen, int line)
