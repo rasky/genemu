@@ -133,6 +133,14 @@ void GFX::draw_sprites(uint8_t *screen, int line)
         int sx = ((table[6] & 0x3) << 8) | table[7];
         int link = BITS(table[3], 0, 7);
 
+        if (line == 0)
+        {
+            // mem_log("SPRITE", "(sx:%d, sy:%d sz:%d,%d, name:%04x, link:%02x)\n",
+            //     sx, sy, sw,sh, name, link);
+        }
+
+        if (!link) break;
+
         sy -= 128;
         sx -= 128;
 
@@ -141,16 +149,16 @@ void GFX::draw_sprites(uint8_t *screen, int line)
             int row = (line - sy) >> 3;
             int paty = (line - sy) & 7;
 
-            name += row;
             if (sx > -sw*8 && sx < SCREEN_WIDTH)
             {
+                name += row;
                 for (int p=0;p<sw;p++)
                 {
                     draw_pattern(screen + (sx+p*8)*4, name, paty);
                     num_pixels += 8;
                     if (num_pixels >= 256)
                         return;
-                    name += sw;
+                    name += sh;
                 }
             }
 
@@ -159,7 +167,6 @@ void GFX::draw_sprites(uint8_t *screen, int line)
                 return;
         }
 
-        if (!link) break;
         sidx = link;
     }
 
