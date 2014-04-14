@@ -269,6 +269,13 @@ void GFX::draw_scanline(uint8_t *screen, int line)
     if (!BIT(VDP.regs[1], 6))
         return;
 
+    int hsa, hsb;
+    get_hscroll(line, &hsa, &hsb);
+
+    // Plane B
+    draw_plane_ab(screen, VDP.get_nametable_B(), hsb, line);
+
+    // Plane A or W
     linew = false;
     if (winv) {
         if (winvdown && line >= winv*8)
@@ -284,14 +291,10 @@ void GFX::draw_scanline(uint8_t *screen, int line)
         }
     }
 
-    int hsa, hsb;
-    get_hscroll(line, &hsa, &hsb);
-
     if (!linew)
         draw_plane_ab(screen, VDP.get_nametable_A(), hsa, line);
 
-    draw_plane_ab(screen, VDP.get_nametable_B(), hsb, line);
-
+    // Sprites
     draw_sprites(screen, line);
 }
 
