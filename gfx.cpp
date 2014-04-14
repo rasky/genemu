@@ -11,9 +11,9 @@
 class GFX
 {
 private:
-    void draw_pixel(uint8_t *screen, uint16_t rgb);
+    void draw_pixel(uint8_t *screen, uint16_t rgb, int pri);
     template <bool fliph>
-    void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette);
+    void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int pri);
     void draw_pattern(uint8_t *screen, uint16_t name, int paty);
     void draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty);
     void draw_plane_ab(uint8_t *screen, int line, int ntaddr, int hs, int vs);
@@ -33,15 +33,19 @@ public:
 #define CRAM_B(c)          COLOR_3B_TO_8B(BITS((c), 9, 3))
 
 
-inline void GFX::draw_pixel(uint8_t *screen, uint16_t rgb)
+inline void GFX::draw_pixel(uint8_t *screen, uint16_t rgb, int pri)
 {
-    screen[0] = CRAM_R(rgb);
-    screen[1] = CRAM_G(rgb);
-    screen[2] = CRAM_B(rgb);
+    if (pri >= screen[3])
+    {
+        screen[0] = CRAM_R(rgb);
+        screen[1] = CRAM_G(rgb);
+        screen[2] = CRAM_B(rgb);
+        screen[3] = pri;
+    }
 }
 
 template <bool fliph>
-void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette)
+void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int pri)
 {
     if (fliph)
         pattern += 3;
@@ -52,8 +56,8 @@ void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette)
         uint8_t pix1 = !fliph ? pix>>4 : pix&0xF;
         uint8_t pix2 = !fliph ? pix&0xF : pix>>4;
 
-        if (pix1) draw_pixel(screen+0, palette[pix1]);
-        if (pix2) draw_pixel(screen+4, palette[pix2]);
+        if (pix1) draw_pixel(screen+0, palette[pix1], pri);
+        if (pix2) draw_pixel(screen+4, palette[pix2], pri);
 
         if (fliph)
             pattern--;
@@ -79,9 +83,9 @@ void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty)
         pattern += (7-paty)*4;
 
     if (!pat_fliph)
-        draw_pattern<false>(screen, pattern, palette);
+        draw_pattern<false>(screen, pattern, palette, pat_pri);
     else
-        draw_pattern<true>(screen, pattern, palette);
+        draw_pattern<true>(screen, pattern, palette, pat_pri);
 }
 
 
@@ -143,28 +147,37 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, int scrollx, int 
 
 void GFX::draw_sprites(uint8_t *screen, int line)
 {
+    int indices[64];
     uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & 0x7F) << 9);
-    int sidx = 0;
-    int num_visible = 0;
-    int num_pixels = 0;
+    int sidx;
+    int ns;
 
-    for (int ns = 0; ns < 64; ++ns)
+    sidx = 0;
+    for (ns = 0; ns < 64; ++ns)
     {
         uint8_t *table = start_table + sidx*8;
+        int link = BITS(table[3], 0, 7);
+        if (link == 0) break;
+        indices[ns] = sidx;
+        sidx = link;
+    }
+
+    int num_visible = 0;
+    int num_pixels = 0;
+    for (int i=ns-1;i>=0;i--)
+    {
+        uint8_t *table = start_table + indices[i]*8;
         int sy = ((table[0] & 0x3) << 8) | table[1];
         int sh = BITS(table[2], 0, 2) + 1;
         uint16_t name = (table[4] << 8) | table[5];
         int sw = BITS(table[2], 2, 2) + 1;
         int sx = ((table[6] & 0x3) << 8) | table[7];
-        int link = BITS(table[3], 0, 7);
 
         if (line == 0)
         {
             // mem_log("SPRITE", "(sx:%d, sy:%d sz:%d,%d, name:%04x, link:%02x)\n",
             //     sx, sy, sw,sh, name, link);
         }
-
-        if (!link) break;
 
         sy -= 128;
         sx -= 128;
@@ -191,10 +204,7 @@ void GFX::draw_sprites(uint8_t *screen, int line)
             if (++num_visible >= 16)
                 return;
         }
-
-        sidx = link;
     }
-
 }
 
 void GFX::get_hscroll(int line, int *hscroll_a, int *hscroll_b)
@@ -261,15 +271,13 @@ void GFX::draw_scanline(uint8_t *screen, int line)
     }
 
     // Display enable
+    memset(screen, 0, SCREEN_WIDTH*4);
     if (BIT(VDP.regs[0], 0))
-    {
-        memset(screen, 0, SCREEN_WIDTH*4);
         return;
-    }
 
     uint16_t backdrop_color = VDP.CRAM[BITS(VDP.regs[7], 0, 6)];
     for (int x=0;x<SCREEN_WIDTH;x++)
-        draw_pixel(screen + x*4, backdrop_color);
+        draw_pixel(screen + x*4, backdrop_color, 0);
 
     // Plaen/sprite disable, show only backdrop
     if (!BIT(VDP.regs[1], 6))
