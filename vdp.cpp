@@ -300,7 +300,9 @@ void vdp_mem_w8(unsigned int address, unsigned int value)
             return;
 
         default:
-            fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled write8 IO:%02x val:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F, value);
+            vdp_mem_w16(address & ~1, (value << 8) | value);
+            return;
+            //fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled write8 IO:%02x val:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F, value);
     }
 }
 
@@ -321,8 +323,10 @@ void vdp_mem_w16(unsigned int address, unsigned int value)
 
 unsigned int vdp_mem_r8(unsigned int address)
 {
-    fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled read8 IO:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F);
-    return 0xFF;
+    unsigned int ret = vdp_mem_r16(address & ~1);
+    if (address & 1)
+        return ret & 0xFF;
+    return ret >> 8;
 }
 
 unsigned int vdp_mem_r16(unsigned int address)
