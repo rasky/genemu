@@ -132,6 +132,26 @@ static unsigned int io_mem_r16(unsigned int address)
 
 static void io_mem_w8(unsigned int address, unsigned int value)
 {
+    address &= 0xFFFF;
+    if (address == 0x1100)
+    {
+        Z80_BUSREQ = value & 1;
+        return;
+    }
+
+    if (address == 0x1200)
+    {
+        int oldreset = Z80_RESET;
+        Z80_RESET = value & 1;
+        if (!oldreset && Z80_RESET)
+        {
+            // 0->1 transition: reset the Z80
+            ResetZ80(&z80);
+            mem_log("Z80", "reset triggered\n");
+        }
+        return;
+    }
+
     mem_log("MEM", "write8 to I/O area %04x: %04x\n", address, value);
 }
 static void io_mem_w16(unsigned int address, unsigned int value)
@@ -143,23 +163,9 @@ static void io_mem_w16(unsigned int address, unsigned int value)
         return;
     }
 
-    if (address == 0x1100)
+    if (address == 0x1100 || address == 0x1200)
     {
-        value >>= 8;
-        Z80_BUSREQ = value & 1;
-        return;
-    }
-
-    if (address == 0x1200)
-    {
-        int oldreset = Z80_RESET;
-        Z80_RESET = (value >> 8) & 1;
-        if (!oldreset && Z80_RESET)
-        {
-            // 0->1 transition: reset the Z80
-            ResetZ80(&z80);
-            mem_log("Z80", "reset triggered\n");
-        }
+        io_mem_w8(address, value >> 8);
         return;
     }
 
