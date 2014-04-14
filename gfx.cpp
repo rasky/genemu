@@ -5,6 +5,8 @@
 #include <stdio.h>
 
 #define SCREEN_WIDTH 320
+#define MAX(a,b) ((a)>(b)?(a):(b))
+#define MIN(a,b) ((a)<(b)?(a):(b))
 
 class GFX
 {
@@ -13,10 +15,12 @@ private:
     template <bool fliph>
     void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette);
     void draw_pattern(uint8_t *screen, uint16_t name, int paty);
-    void draw_nametable(uint8_t *screen, uint8_t *nt, int paty);
-    void draw_plane_ab(uint8_t *screen, int ntaddr, int y);
+    void draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty);
+    void draw_plane_ab(uint8_t *screen, int ntaddr, int hs, int y);
     void draw_plane_w(uint8_t *screen, int y);
     void draw_sprites(uint8_t *screen, int line);
+
+    void get_hscroll(int line, int *hscroll_a, int *hscroll_b);
 
 public:
     void draw_scanline(uint8_t *screen, int line);
@@ -81,9 +85,9 @@ void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty)
 }
 
 
-void GFX::draw_nametable(uint8_t *screen, uint8_t *nt, int paty)
+void GFX::draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty)
 {
-    for (int i = 0; i < 40; ++i)
+    for (int i = 0; i < numcols; ++i)
     {
         draw_pattern(screen, (nt[0] << 8) | nt[1], paty);
         nt += 2;
@@ -97,15 +101,16 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
     int row = y >> 3;
     int paty = y & 7;
 
-    draw_nametable(screen, VDP.VRAM + addr_w + row*(2*40), paty);
+    draw_nametable(screen, VDP.VRAM + addr_w + row*(2*40), SCREEN_WIDTH/8, paty);
 }
 
-void GFX::draw_plane_ab(uint8_t *screen, int ntaddr, int y)
+void GFX::draw_plane_ab(uint8_t *screen, int ntaddr, int scrollx, int scrolly)
 {
-    int row = y >> 3;
-    int paty = y & 7;
+    int row = scrolly >> 3;
+    int paty = scrolly & 7;
     int ntwidth = BITS(VDP.regs[16], 0, 2);
     int ntheight = BITS(VDP.regs[16], 4, 2);
+    int screen_cols = SCREEN_WIDTH / 8;
 
     assert(ntwidth != 2);  // invalid setting
     assert(ntheight != 2); // invalid setting
@@ -113,7 +118,24 @@ void GFX::draw_plane_ab(uint8_t *screen, int ntaddr, int y)
     ntwidth  = (ntwidth + 1) * 32;
     ntheight = (ntheight + 1) * 32;
 
-    draw_nametable(screen, VDP.VRAM + ntaddr + row*(2*ntwidth), paty);
+    scrollx %= ntwidth*8;
+
+    if (scrollx < SCREEN_WIDTH)
+    {
+        int num_cols = (SCREEN_WIDTH - scrollx + 7) / 8;
+        draw_nametable(screen + scrollx*4, VDP.VRAM + ntaddr + row*(2*ntwidth), num_cols, paty);
+    }
+
+    if (scrollx > 0)
+    {
+        //mem_log("SCROLL", "scrollx:%d, ntwidth:%d\n", scrollx, ntwidth);
+        scrollx -= ntwidth*8;
+        int col = (-scrollx) / 8;
+        int patx = (-scrollx) & 7;
+        assert(col >= 0 && col < ntwidth);
+        int num_cols = MIN(ntwidth - col, SCREEN_WIDTH/8);
+        draw_nametable(screen - patx*4, VDP.VRAM + ntaddr + row*(2*ntwidth) + col*2, num_cols, paty);
+    }
 }
 
 void GFX::draw_sprites(uint8_t *screen, int line)
@@ -172,6 +194,33 @@ void GFX::draw_sprites(uint8_t *screen, int line)
 
 }
 
+void GFX::get_hscroll(int line, int *hscroll_a, int *hscroll_b)
+{
+    int table_offset = VDP.regs[13] & 0x3F;
+    int mode = VDP.regs[11] & 3;
+    uint8_t *table = VDP.VRAM + (table_offset << 10);
+    int idx;
+
+    switch (mode)
+    {
+    case 0: // Full screen scrolling
+        idx = 0;
+        break;
+    case 1: // First 8 lines
+        idx = (line & 7);
+        break;
+    case 2: // Every row
+        idx = (line & ~7);
+        break;
+    case 3: // Every line
+        idx = line;
+        break;
+    }
+
+    *hscroll_a = FETCH16(table + idx*4 + 0) & 0x3FF;
+    *hscroll_b = FETCH16(table + idx*4 + 2) & 0x3FF;
+}
+
 void GFX::draw_scanline(uint8_t *screen, int line)
 {
     int winh = VDP.regs[17] & 0x1F;
@@ -183,6 +232,8 @@ void GFX::draw_scanline(uint8_t *screen, int line)
 
     if (BITS(VDP.regs[12], 1, 2) != 0)
         assert(!"interlace mode");
+    if (BIT(VDP.regs[0], 4))
+        assert(!"horizontal interrupt");
 
     if (line >= 224)
         return;
@@ -233,10 +284,13 @@ void GFX::draw_scanline(uint8_t *screen, int line)
         }
     }
 
-    if (!linew)
-        draw_plane_ab(screen, VDP.get_nametable_A(), line);
+    int hsa, hsb;
+    get_hscroll(line, &hsa, &hsb);
 
-    draw_plane_ab(screen, VDP.get_nametable_B(), line);
+    if (!linew)
+        draw_plane_ab(screen, VDP.get_nametable_A(), hsa, line);
+
+    draw_plane_ab(screen, VDP.get_nametable_B(), hsb, line);
 
     draw_sprites(screen, line);
 }
