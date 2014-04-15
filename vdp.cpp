@@ -54,6 +54,8 @@ void VDP::data_port_w16(uint16_t value)
     switch (code_reg & 0xF)
     {
     case 0x1:
+        mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%d\n",
+            address_reg, REG15_DMA_INCREMENT, vcounter);
         VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
         VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
         address_reg += REG15_DMA_INCREMENT;
@@ -68,6 +70,12 @@ void VDP::data_port_w16(uint16_t value)
         VSRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
         address_reg &= 0x7F;
+        break;
+
+    case 0x0:
+    case 0x4:
+    case 0x6:
+        // Write operation after setting up read: ignored (ex: ecco2)
         break;
 
     default:
@@ -190,7 +198,10 @@ void VDP::scanline(uint8_t* screen)
     if (--line_counter_interrupt == 0)
     {
         if (REG0_LINE_INTERRUPT)
+        {
+            mem_log("VDP", "HINTERRUPT (new counter: %d)\n", line_counter_interrupt);
             m68k_set_irq(M68K_IRQ_4);
+        }
 
         line_counter_interrupt = REG10_LINE_COUNTER;
     }
@@ -298,6 +309,8 @@ void VDP::dma_m68k()
         } while (--length);
         break;
     case 0x5:
+        mem_log("VDP", "DMA M68K->VSRAM: src_addr:%06x dst_addr:%x length:%x increment:%d\n",
+            src_addr, address_reg, length, REG15_DMA_INCREMENT);
         do {
             int value = m68k_read_memory_16(src_addr);
             src_addr += 2;
