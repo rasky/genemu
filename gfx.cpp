@@ -191,8 +191,6 @@ void GFX::draw_sprites(uint8_t *screen, int line)
         int sw = BITS(table[2], 2, 2) + 1;
         int sx = ((table[6] & 0x3) << 8) | table[7];
 
-        if (link == 0) break;
-
         // Sprite masking: a sprite with X=0 blocks other lower-priority
         // sprites on the same line.
         if (line == 0 && (sx == 0 || sx == 1))
@@ -209,6 +207,7 @@ void GFX::draw_sprites(uint8_t *screen, int line)
                 break;
         }
 
+        if (link == 0) break;
         sidx = link;
     }
 
