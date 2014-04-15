@@ -99,6 +99,12 @@ uint16_t VDP::data_port_r16(void)
         address_reg &= 0xFFFF;
         return value;
 
+    case 0x8:
+        value = CRAM[(address_reg >> 1) & 0x3F];
+        address_reg += REG15_DMA_INCREMENT;
+        address_reg &= 0x7F;
+        return value;
+
     default:
         fprintf(stdout, "[VDP][PC=%06x](%04d) invalid data port write16: code:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg);
         assert(!"data port r not handled");
