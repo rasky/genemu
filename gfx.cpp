@@ -205,6 +205,11 @@ void GFX::draw_sprites(uint8_t *screen, int line)
             // Sprite limits: stop drawing at 16 sprites or 256 pixels
             if (ns >= 16 || num_pixels >= 256)
                 break;
+
+            // Sprite masking: a sprite on column 0 masks
+            // any lower-priority sprite (ex: sunsetriders)
+            if (sx == 0)
+                break;
         }
 
         if (link == 0) break;
