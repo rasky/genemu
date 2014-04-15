@@ -139,12 +139,11 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, int scrollx, int 
 
     if (scrollx > 0)
     {
-        //mem_log("SCROLL", "scrollx:%d, ntwidth:%d\n", scrollx, ntwidth);
         scrollx -= ntwidth*8;
         int col = (-scrollx) / 8;
         int patx = (-scrollx) & 7;
         assert(col >= 0 && col < ntwidth);
-        int num_cols = MIN(ntwidth - col, SCREEN_WIDTH/8);
+        int num_cols = MIN(ntwidth - col, SCREEN_WIDTH/8 + 1);
         draw_nametable(screen - patx*4, VDP.VRAM + ntaddr + row*(2*ntwidth) + col*2, num_cols, paty);
     }
 }
