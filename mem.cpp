@@ -5,20 +5,16 @@
 #include <stdint.h>
 #include <memory.h>
 extern "C" {
-    #include "m68k/m68k.h"
-    #include "Z80/Z80.h"
     #include "ym2612/ym2612.h"
 }
 #include "vdp.h"
-
+#include "cpu.h"
 
 uint8_t *ROM;
 uint8_t RAM[0x10000];
 uint8_t ZRAM[0x2000];
-int Z80_BUSREQ;
-int Z80_RESET;
 int Z80_BANK;
-extern Z80 z80;
+extern int activecpu;
 
 inline uint16_t SWAP16(uint16_t a) {
     return (a >> 8) | (a << 8);
@@ -79,7 +75,7 @@ static unsigned int exp_mem_r8(unsigned int address)
 static unsigned int exp_mem_r16(unsigned int address)
 {
     mem_log("MEM", "read16 from expansion area %06x\n", address);
-    return m68k_read_memory_16(m68k_get_reg(NULL, M68K_REG_PC)) & 0xFF00;
+    return m68k_read_memory_16(CPU_M68K.PC()) & 0xFF00;
 }
 static void exp_mem_w8(unsigned int address, unsigned int value)
 {
@@ -109,15 +105,12 @@ static unsigned int io_mem_r8(unsigned int address)
     }
 
     if (address == 0x1100)
-    {
-        unsigned val = 0x00 | (~Z80_BUSREQ & 1);
-        return val;
-    }
+        return 0x00 | (~CPU_Z80.get_busreq_line() & 1);
     if (address == 0x1101)
         return 0x00;
 
     if (address == 0x1200)
-        return 0x00 | Z80_RESET;
+        return 0x00 | (CPU_Z80.get_reset_line() & 1);
     if (address == 0x1201)
         return 0x00;
 
@@ -135,20 +128,31 @@ static void io_mem_w8(unsigned int address, unsigned int value)
     address &= 0xFFFF;
     if (address == 0x1100)
     {
-        Z80_BUSREQ = value & 1;
+        //Z80_BUSREQ = value & 1;
+        assert(activecpu == 0);
+        CPU_Z80.sync();
+        CPU_Z80.set_busreq_line(value & 1);
         return;
     }
 
     if (address == 0x1200)
     {
-        int oldreset = Z80_RESET;
-        Z80_RESET = value & 1;
-        if (!oldreset && Z80_RESET)
-        {
-            // 0->1 transition: reset the Z80
-            ResetZ80(&z80);
-            mem_log("Z80", "reset triggered\n");
-        }
+        assert(activecpu == 0);
+        CPU_Z80.sync();
+        CPU_Z80.set_reset_line(~value & 1);
+        // int oldreset = Z80_RESET;
+        // Z80_RESET = value & 1;
+        // if (!oldreset && Z80_RESET)
+        // {
+        //     // 0->1 transition: reset the Z80
+        //     ResetZ80(&z80);
+        //     mem_log("Z80", "reset triggered\n");
+        //     #if 1
+        //     FILE *f = fopen("z80.dmp", "wb");
+        //     fwrite(ZRAM, 0x2000, 1, f);
+        //     fclose(f);
+        //     #endif
+        // }
         return;
     }
 
@@ -448,9 +452,6 @@ void mem_init(int romsize)
     for (int i=0x8;i<0x10;++i)
         z80_memtable[i] = MEMFUN_PAIR(&ZBANK);
 
-    Z80_BUSREQ = 0;
-    Z80_RESET = 0;
-
     YM2612Init();
     YM2612Config(9);
     YM2612ResetChip();
@@ -461,7 +462,10 @@ void mem_log(const char *subs, const char *fmt, ...)
     extern int framecounter;
     va_list va;
 
-    fprintf(stdout, "[%s][PC=%06x](%04d) ", subs, m68k_get_reg(NULL, M68K_REG_PC), framecounter);
+    if (activecpu == 0)
+        fprintf(stdout, "[%s][MPC=%06x](%04d) ", subs, CPU_M68K.PC(), framecounter);
+    else
+        fprintf(stdout, "[%s][ZPC=%06x](%04d) ", subs, CPU_Z80.PC(), framecounter);
     va_start(va, fmt);
     vfprintf(stdout, fmt, va);
     va_end(va);

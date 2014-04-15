@@ -1,19 +1,19 @@
 #include "hw.h"
 #include <SDL.h>
 extern "C" {
-    #include "m68k/m68k.h"
-    #include "z80/Z80.h"
     #include "ym2612/ym2612.h"
 }
 #include "vdp.h"
+#include "cpu.h"
 #include "mem.h"
 #include <string.h>
+#include <assert.h>
 
-#define MAIN_CPU_FREQ     7670000
-#define SLAVE_CPU_FREQ    (MAIN_CPU_FREQ/2)
-Z80 z80;
+#define MAIN_CPU_FREQ     (VDP_MASTER_FREQ / M68K_FREQ_DIVISOR)
+#define SLAVE_CPU_FREQ    (VDP_MASTER_FREQ / Z80_FREQ_DIVISOR)
 
 int framecounter;
+uint64_t MASTER_CLOCK;   // VDP_MASTER_FREQ
 
 
 int main(int argc, char *argv[])
@@ -32,6 +32,13 @@ int main(int argc, char *argv[])
     mem_init(romsize);
 
 #if 0
+    uint16_t checksum = 0;
+    for (int i=0;i<(romsize-512)/2;i++)
+        checksum += m68k_read_memory_16(512+i*2);
+    assert(checksum == m68k_read_memory_16(0x18e));
+#endif
+
+#if 1
     char buf[256];
     int pc = 0;
     strcpy(buf, argv[1]);
@@ -45,11 +52,13 @@ int main(int argc, char *argv[])
     fclose(f);
 #endif
 
+    CPU_M68K.init();
+    CPU_Z80.init();
+
     hw_init();
     vdp_init();
-    m68k_init();
-    m68k_set_cpu_type(M68K_CPU_TYPE_68000);
-    m68k_pulse_reset();
+    MASTER_CLOCK = 0;
+    CPU_M68K.reset();
 
     while (hw_poll())
     {
@@ -59,19 +68,15 @@ int main(int argc, char *argv[])
 
         for (int sl=0;sl<VDP_SCANLINES;++sl)
         {
-            m68k_execute(MAIN_CPU_FREQ / VDP_HZ / VDP_SCANLINES);
+            if (sl == 0xE0)
+                CPU_Z80.irq();
 
-            // Technically, BUSREQ would pause the Z80 on memory accesses,
-            // but we simplify by pausing it altogether
-            if (!Z80_BUSREQ && Z80_RESET)
-            {
-                if (sl == 0xE0)
-                    IntZ80(&z80, INT_IRQ);
-                ExecZ80(&z80, SLAVE_CPU_FREQ / VDP_HZ / VDP_SCANLINES);
-            }
+            CPU_M68K.run(MASTER_CLOCK + VDP_CYCLES_PER_LINE);
+            CPU_Z80 .run(MASTER_CLOCK + VDP_CYCLES_PER_LINE);
 
             vdp_scanline(screen);
             screen += pitch;
+            MASTER_CLOCK += VDP_CYCLES_PER_LINE;
         }
 
         int16_t *audio;
@@ -82,6 +87,13 @@ int main(int argc, char *argv[])
         hw_endframe();
         ++framecounter;
     }
+
+#if 0
+    checksum = 0;
+    for (int i=0;i<(romsize-512)/2;i++)
+        checksum += m68k_read_memory_16(512+i*2);
+    assert(checksum == m68k_read_memory_16(0x18e));
+#endif
 
     return 0;
 }
