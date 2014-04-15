@@ -106,7 +106,10 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
     int row = y >> 3;
     int paty = y & 7;
 
-    draw_nametable(screen, VDP.VRAM + addr_w + row*(2*40), SCREEN_WIDTH/8, paty);
+    if (BIT(VDP.regs[0xC], 7))
+        draw_nametable(screen, VDP.VRAM + addr_w + row*(2*40), 40, paty);
+    else
+        draw_nametable(screen, VDP.VRAM + addr_w + row*(2*32), 32, paty);
 }
 
 void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, int scrollx, int scrolly)
