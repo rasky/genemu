@@ -72,7 +72,31 @@ void VDP::data_port_w16(uint16_t value)
 
     default:
         fprintf(stdout, "[VDP][PC=%06x](%04d) invalid data port write16: code:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg);
+        assert(!"data port w not handled");
     }
+}
+
+uint16_t VDP::data_port_r16(void)
+{
+    uint16_t value;
+
+    command_word_pending = false;
+
+    switch (code_reg & 0xF)
+    {
+    case 0x0:
+        value =  VRAM[(address_reg    ) & 0xFFFF] << 8;
+        value |= VRAM[(address_reg ^ 1) & 0xFFFF];
+        address_reg += REG15_DMA_INCREMENT;
+        address_reg &= 0xFFFF;
+        return value;
+
+    default:
+        fprintf(stdout, "[VDP][PC=%06x](%04d) invalid data port write16: code:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg);
+        assert(!"data port r not handled");
+    }
+
+
 }
 
 
@@ -142,6 +166,19 @@ uint16_t VDP::status_register_r(void)
     command_word_pending = false;
 
     return status;
+}
+
+uint16_t VDP::hvcounter_r16(void)
+{
+    int hc = hcounter();
+    int vc = vcounter;
+
+    if (vc >= 0xEA) vc -= 0xEA - 0x05;
+    if (hc >= 0xE9) hc -= 0xE9 - 0x93;
+    assert(vc < 256);
+    assert(hc < 256);
+
+    return (vc << 8) | hc;
 }
 
 void VDP::scanline(uint8_t* screen)
@@ -317,6 +354,7 @@ void vdp_mem_w16(unsigned int address, unsigned int value)
 
         default:
             fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled write16 IO:%02x val:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F, value);
+            assert(!"unhandled vdp_mem_w16");
     }
 
 }
@@ -334,11 +372,20 @@ unsigned int vdp_mem_r16(unsigned int address)
     unsigned int ret;
 
     switch (address & 0x1F) {
+        case 0x0:
+        case 0x2: return VDP.data_port_r16();
+
         case 0x4:
-        case 0x6:
-            return VDP.status_register_r();
+        case 0x6: return VDP.status_register_r();
+
+        case 0x8:
+        case 0xA:
+        case 0xC:
+        case 0xE: return VDP.hvcounter_r16();
+
         default:
             fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled read16 IO:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F);
+            assert(!"unhandled vdp_mem_r16");
             return 0xFF;
     }
 }

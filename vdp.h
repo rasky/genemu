@@ -8,6 +8,7 @@
 #define VDP_SCANLINES         262
 
 #define M68K_FREQ_DIVISOR     7
+#define Z80_FREQ_DIVISOR      14
 
 class VDP
 {
@@ -43,6 +44,8 @@ public:
     uint16_t status_register_r();
     void control_port_w(uint16_t value);
     void data_port_w16(uint16_t value);
+    uint16_t data_port_r16(void);
+    uint16_t hvcounter_r16(void);
 };
 
 extern class VDP VDP;
