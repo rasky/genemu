@@ -74,8 +74,8 @@ void VDP::data_port_w16(uint16_t value)
 
     case 0x0:
     case 0x4:
-    case 0x6:
-        // Write operation after setting up read: ignored (ex: ecco2)
+    case 0x8:
+        // Write operation after setting up read: ignored (ex: ecco2, aladdin)
         break;
 
     default:
