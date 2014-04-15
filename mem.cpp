@@ -9,6 +9,7 @@ extern "C" {
 }
 #include "vdp.h"
 #include "cpu.h"
+#include "ioports.h"
 
 uint8_t *ROM;
 uint8_t RAM[0x10000];
@@ -102,10 +103,7 @@ static unsigned int io_mem_r8(unsigned int address)
         return 0xA0;
 
     if (address < 0x20)
-    {
-        mem_log("MEM", "read8 from I/O area: %04x\n", address);
-        return 0xFF;
-    }
+        return ioports_read(address);
 
     if (address == 0x1100)
         return 0x00 | (~CPU_Z80.get_busreq_line() & 1);
@@ -129,6 +127,13 @@ static unsigned int io_mem_r16(unsigned int address)
 static void io_mem_w8(unsigned int address, unsigned int value)
 {
     address &= 0xFFFF;
+
+    if (address < 0x20)
+    {
+        ioports_write(address, value);
+        return;
+    }
+
     if (address == 0x1100)
     {
         //Z80_BUSREQ = value & 1;
