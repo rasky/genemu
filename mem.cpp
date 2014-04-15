@@ -40,7 +40,9 @@ struct memfunc_pair {
 static unsigned int z80area_mem_r16(unsigned int address)
 {
     address &= 0x7FFF;
-    return (RdZ80(address) << 8) | RdZ80(address + 1);
+    assert(!"68000 word read from z80 area");
+    unsigned int value = RdZ80(address);
+    return (value << 8) | value;
 }
 
 static unsigned int z80area_mem_r8(unsigned int address)
@@ -52,8 +54,9 @@ static unsigned int z80area_mem_r8(unsigned int address)
 static void z80area_mem_w16(unsigned int address, unsigned int value)
 {
     address &= 0x7FFF;
+    // Only MSB is written, because the memory is connected through a 8-bit bus
+    // es: gunstarheroes
     WrZ80(address, value >> 8);
-    WrZ80(address, value & 0xFF);
 }
 
 static void z80area_mem_w8(unsigned int address, unsigned int value)
