@@ -212,7 +212,7 @@ void GFX::draw_sprites(uint8_t *screen, int line)
         sidx = link;
     }
 
-    assert(ns < 16);
+    assert(ns <= 16);
 
     for (int i=ns-1;i>=0;i--)
     {
