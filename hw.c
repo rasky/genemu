@@ -1,6 +1,7 @@
 #include "hw.h"
 #include <SDL.h>
 #include <SDL_framerate.h>
+#include <SDL_rotozoom.h>
 #include <assert.h>
 #include <time.h>
 
@@ -16,6 +17,7 @@ static clock_t frameclock;
 static int framecounter;
 
 #define SPLIT 20
+#define ZOOM 3
 
 static void fill_audio(void *userdata, uint8_t* stream, int len);
 
@@ -28,7 +30,7 @@ void hw_init(void)
     }
     atexit(SDL_Quit);
 
-    screen=SDL_SetVideoMode(320, 224, 32, SDL_DOUBLEBUF);
+    screen=SDL_SetVideoMode(320*ZOOM, 224*ZOOM, 32, SDL_DOUBLEBUF);
     if (screen == NULL)
     {
        printf("Unable to set video mode: %s\n", SDL_GetError());
@@ -89,10 +91,34 @@ void hw_beginframe(uint8_t **screen, int *pitch)
 void hw_endframe(void)
 {
     SDL_UnlockSurface(frame);
-    SDL_BlitSurface(frame, NULL, screen, NULL);
 
     if (!frameclock || SDL_GetTicks() < frameclock)
     {
+        SDL_LockSurface(frame);
+        uint8_t *src = frame->pixels;
+        int srcpitch = frame->pitch;
+        SDL_LockSurface(screen);
+        uint8_t *dst = screen->pixels;
+        int dstpitch = screen->pitch;
+
+        for (int y=0;y<frame->h;y++)
+        {
+            for (int zy=0;zy<ZOOM;zy++)
+            {
+                uint32_t *drow = (uint32_t*)(dst + dstpitch*(y*ZOOM+zy));
+                uint32_t *srow = (uint32_t*)(src + srcpitch*y);
+
+                for (int x=0;x<frame->w;x++)
+                {
+                    for (int z=0;z<ZOOM;z++)
+                        *drow++ = *srow << 8;
+                    srow++;
+                }
+            }
+        }
+
+        SDL_UnlockSurface(screen);
+        SDL_UnlockSurface(frame);
         SDL_Flip(screen);
         //SDL_framerateDelay(&fps);
     }
