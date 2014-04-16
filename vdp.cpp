@@ -93,6 +93,8 @@ uint16_t VDP::data_port_r16(void)
     switch (code_reg & 0xF)
     {
     case 0x0:
+        // Check if byteswap happens when reading or not
+        assert((address_reg & 1) == 0);
         value =  VRAM[(address_reg    ) & 0xFFFF] << 8;
         value |= VRAM[(address_reg ^ 1) & 0xFFFF];
         address_reg += REG15_DMA_INCREMENT;
