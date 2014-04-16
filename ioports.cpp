@@ -102,6 +102,8 @@ protected:
                 ret |= (1 << 0);
             if (keystate[km[1]])
                 ret |= (1 << 1);
+            ret |= (1 << 2);
+            ret |= (1 << 3);
             if (keystate[km[5]])
                 ret |= (1 << 4);
             if (keystate[km[4]])
