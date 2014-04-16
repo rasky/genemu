@@ -34,6 +34,8 @@ struct memfunc_pair {
 #define MEMFUN_PAIR(x)         ((void*)((unsigned long)(x) | 1))
 #define GET_MEMFUNC_PAIR(x)    ((memfunc_pair*)((unsigned long)(x) & ~1))
 
+void mem_z80area(bool active);
+
 /********************************************
  * Z80 area access from m68k
  ********************************************/
@@ -136,10 +138,10 @@ static void io_mem_w8(unsigned int address, unsigned int value)
 
     if (address == 0x1100)
     {
-        //Z80_BUSREQ = value & 1;
         assert(activecpu == 0);
         CPU_Z80.sync();
         CPU_Z80.set_busreq_line(value & 1);
+        mem_z80area(value & 1);
         return;
     }
 
@@ -148,19 +150,6 @@ static void io_mem_w8(unsigned int address, unsigned int value)
         assert(activecpu == 0);
         CPU_Z80.sync();
         CPU_Z80.set_reset_line(~value & 1);
-        // int oldreset = Z80_RESET;
-        // Z80_RESET = value & 1;
-        // if (!oldreset && Z80_RESET)
-        // {
-        //     // 0->1 transition: reset the Z80
-        //     ResetZ80(&z80);
-        //     mem_log("Z80", "reset triggered\n");
-        //     #if 1
-        //     FILE *f = fopen("z80.dmp", "wb");
-        //     fwrite(ZRAM, 0x2000, 1, f);
-        //     fclose(f);
-        //     #endif
-        // }
         return;
     }
 
@@ -435,12 +424,23 @@ static memfunc_pair ZBANK = { zbank_mem_r8, NULL, zbank_mem_w8, NULL };
 static memfunc_pair ZVDP = { zvdp_mem_r8, NULL, zvdp_mem_w8, NULL };
 static memfunc_pair YM2612 = { ym2612_mem_r8, NULL, ym2612_mem_w8, NULL };
 
+void mem_z80area(bool active)
+{
+    if (active)
+    {
+        m68k_memtable[0xA0] = MEMFUN_PAIR(&Z80AREA);
+    }
+    else
+    {
+        m68k_memtable[0xA0] = NULL;
+    }
+}
+
 void mem_init(int romsize)
 {
     romsize /= 65536;
     for (int i=0;i<romsize;++i)
         m68k_memtable[i] = ROM + i*65536;
-    m68k_memtable[0xA0] = MEMFUN_PAIR(&Z80AREA);
     m68k_memtable[0xA1] = MEMFUN_PAIR(&IO);
     for (int i=0xA2;i<0xC0;i++)
         m68k_memtable[i] = MEMFUN_PAIR(&EXP);
