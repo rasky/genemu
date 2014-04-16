@@ -4,7 +4,9 @@
 #include <memory.h>
 #include <stdio.h>
 #include <SDL.h>
-
+extern "C" {
+    #include "hw.h"
+}
 #define SCREEN_WIDTH 320
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define MIN(a,b) ((a)<(b)?(a):(b))
