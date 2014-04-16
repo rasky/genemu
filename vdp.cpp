@@ -295,6 +295,11 @@ void VDP::dma_m68k()
 {
     int length = REG19_DMA_LENGTH;
     int src_addr = REG21_DMA_SRC_ADDRESS;
+
+    // Special case for length = 0 (ex: sonic3d)
+    if (length == 0)
+        length = 0xFFFF;
+
     switch (code_reg & 0xF)
     {
     case 0x1:
