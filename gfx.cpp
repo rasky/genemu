@@ -26,7 +26,9 @@ private:
     void get_hscroll(int line, int *hscroll_a, int *hscroll_b);
 
 public:
-    void draw_scanline(uint8_t *screen, int line);
+    int screen_offset() { return (SCREEN_WIDTH - screen_width()) / 2; }
+    int screen_width() { return BIT(VDP.regs[12], 7) ? 40*8 : 32*8; }
+    bool draw_scanline(uint8_t *screen, int line);
 
 } GFX;
 
@@ -108,17 +110,14 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
     int row = y >> 3;
     int paty = y & 7;
 
-    if (BIT(VDP.regs[0xC], 7))
-        draw_nametable(screen, VDP.VRAM + addr_w + row*(2*40), 40, paty);
-    else
-        draw_nametable(screen, VDP.VRAM + addr_w + row*(2*32), 32, paty);
+    draw_nametable(screen, VDP.VRAM + addr_w + row*2*screen_width()/8, screen_width()/8, paty);
 }
 
 void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, int scrollx, int scrolly)
 {
     int ntwidth = BITS(VDP.regs[16], 0, 2);
     int ntheight = BITS(VDP.regs[16], 4, 2);
-    int screen_cols = SCREEN_WIDTH / 8;
+    int screen_cols = screen_width() / 8;
 
     assert(ntwidth != 2);  // invalid setting
     assert(ntheight != 2); // invalid setting
@@ -133,9 +132,9 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, int scrollx, int 
     int row = scrolly >> 3;
     int paty = scrolly & 7;
 
-    if (scrollx < SCREEN_WIDTH)
+    if (scrollx < screen_width())
     {
-        int num_cols = (SCREEN_WIDTH - scrollx + 7) / 8;
+        int num_cols = (screen_width() - scrollx + 7) / 8;
         draw_nametable(screen + scrollx*4, VDP.VRAM + ntaddr + row*(2*ntwidth), num_cols, paty);
     }
 
@@ -145,7 +144,7 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, int scrollx, int 
         int col = (-scrollx) / 8;
         int patx = (-scrollx) & 7;
         assert(col >= 0 && col < ntwidth);
-        int num_cols = MIN(ntwidth - col, SCREEN_WIDTH/8 + 1);
+        int num_cols = MIN(ntwidth - col, screen_width()/8 + 1);
         draw_nametable(screen - patx*4, VDP.VRAM + ntaddr + row*(2*ntwidth) + col*2, num_cols, paty);
     }
 }
@@ -204,9 +203,17 @@ void GFX::draw_sprites(uint8_t *screen, int line)
             indices[ns++] = sidx;
             num_pixels += sw*8;
 
-            // Sprite limits: stop drawing at 16 sprites or 256 pixels
-            if (ns >= 16 || num_pixels >= 256)
-                break;
+            // Enforce sprite limits per scanline (depend on the resolution)
+            if (screen_width() == 320)
+            {
+                if (ns >= 20 || num_pixels >= 320)
+                    break;
+            }
+            else
+            {
+                if (ns >= 16 || num_pixels >= 256)
+                    break;
+            }
 
             // Sprite masking: a sprite on column 0 masks
             // any lower-priority sprite (ex: sunsetriders)
@@ -217,8 +224,6 @@ void GFX::draw_sprites(uint8_t *screen, int line)
         if (link == 0) break;
         sidx = link;
     }
-
-    assert(ns <= 16);
 
     for (int i=ns-1;i>=0;i--)
     {
@@ -242,7 +247,7 @@ void GFX::draw_sprites(uint8_t *screen, int line)
         if (flipv)
             row = sh - row - 1;
 
-        if (sx > -sw*8 && sx < SCREEN_WIDTH)
+        if (sx > -sw*8 && sx < screen_width())
         {
             name += row;
             if (fliph)
@@ -286,7 +291,7 @@ void GFX::get_hscroll(int line, int *hscroll_a, int *hscroll_b)
     *hscroll_b = FETCH16(table + idx*4 + 2) & 0x3FF;
 }
 
-void GFX::draw_scanline(uint8_t *screen, int line)
+bool GFX::draw_scanline(uint8_t *screen, int line)
 {
     int winh = VDP.regs[17] & 0x1F;
     int winhright = VDP.regs[17] >> 7;
@@ -299,13 +304,9 @@ void GFX::draw_scanline(uint8_t *screen, int line)
         assert(!"interlace mode");
 
     if (line >= 224)
-        return;
+        return false;
 
-#if 1
-    uint8_t *keystate = SDL_GetKeyState(NULL);
-#endif
-
-#if 1
+#if 0
     if (line == 0) {
         int addr_a = VDP.get_nametable_A();
         int addr_b = VDP.get_nametable_B();
@@ -329,10 +330,13 @@ void GFX::draw_scanline(uint8_t *screen, int line)
     // Display enable
     memset(screen, 0, SCREEN_WIDTH*4);
     if (BIT(VDP.regs[0], 0))
-        return;
+        return true;
+
+    // Center display if horizontal resolution is smaller
+    screen += screen_offset() * 4;
 
     uint16_t backdrop_color = VDP.CRAM[BITS(VDP.regs[7], 0, 6)];
-    for (int x=0;x<SCREEN_WIDTH;x++)
+    for (int x=0;x<screen_width();x++)
     {
         screen[x*4+3] = 0;
         draw_pixel(screen + x*4, backdrop_color, 0);
@@ -340,7 +344,7 @@ void GFX::draw_scanline(uint8_t *screen, int line)
 
     // Plaen/sprite disable, show only backdrop
     if (!BIT(VDP.regs[1], 6))
-        return;
+        return true;
 
     int hsa, hsb;
     get_hscroll(line, &hsa, &hsb);
@@ -379,11 +383,31 @@ void GFX::draw_scanline(uint8_t *screen, int line)
 
     if (linew && !keystate[SDLK_w])
         draw_plane_w(screen, line);
+
+    // Copy backdrop on area outside the current resolution,
+    // so we overwrite any pattern overflow.
+    for (int x=0;x<screen_offset();x++)
+    {
+        screen[-x*4+3] = 0;
+        draw_pixel(screen + -x*4, backdrop_color, 0);
+    }
+    for (int x=screen_width();x<SCREEN_WIDTH;x++)
+    {
+        screen[x*4+3] = 0;
+        draw_pixel(screen + x*4, backdrop_color, 0);
+    }
+
+    return true;
 }
 
 void gfx_draw_scanline(uint8_t *screen, int line)
 {
-    uint8_t buffer[(SCREEN_WIDTH+32+32)*4];
-    GFX.draw_scanline(buffer+32*4, line);
-    memcpy(screen, buffer+32*4, SCREEN_WIDTH*4);
+    // Overflow is the maximum size we can draw outside to avoid
+    // wasting time and code in clipping. The maximum object is a 4x4 sprite,
+    // so 32 pixels (on both side) is enough.
+    enum { OVERFLOW = 32 };
+
+    uint8_t buffer[(SCREEN_WIDTH+OVERFLOW*2)*4];
+    if (GFX.draw_scanline(buffer+OVERFLOW*4, line))
+        memcpy(screen, buffer+OVERFLOW*4, SCREEN_WIDTH*4);
 }
