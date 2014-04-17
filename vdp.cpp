@@ -36,6 +36,9 @@ void VDP::register_w(int reg, uint8_t value)
 {
     regs[reg] = value;
     fprintf(stdout, "[VDP][PC=%06x](%04d) reg:%02d <- %02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, reg, value);
+
+    // Writing a register clear the codereg (sonic3d intro wrong colors)
+    code_reg = 0;
 }
 
 void VDP::data_port_w16(uint16_t value)
