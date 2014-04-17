@@ -14,6 +14,7 @@ What's emulated
  * Wide resolution change (32 vs 40 cells)
  * FM sound (YM2612)
  * Basic HINTERRUPT emulation
+ * Vertical cell scrolling through VSRAM
 
 Todo list
 =========
@@ -23,7 +24,6 @@ The following is a rough list of missing features or things to be fixed:
  * Correct sprite priority vs bkg
  * Correct hinterrupt / hv counter
  * SN7689 audio chip
- * Vertical cell scrolling through VSRAM
  * PAL vs NTSC game detection
  * Window horizontal clipping (and the infamous "window bug")
  * Accurate timing for DMA
