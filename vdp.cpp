@@ -202,25 +202,27 @@ uint16_t VDP::hvcounter_r16(void)
 
 void VDP::scanline(uint8_t* screen)
 {
+    bool hirq = false;
+
     vcounter++;
     if (vcounter == 262)
         vcounter = 0;
 
     // On these linese, the line counter interrupt is reloaded
-    if (vcounter == 0)  // (vcounter >= 225 && vcounter <= 261) ||
+    if (vcounter == 0 || (vcounter >= 225 && vcounter <= 261))
     {
         if (REG0_LINE_INTERRUPT)
             mem_log("VDP", "HINTERRUPT counter reloaded: (vcounter: %d, new counter: %d)\n", vcounter, REG10_LINE_COUNTER);
         line_counter_interrupt = REG10_LINE_COUNTER;
     }
 
-    // Post-decremented is confirmed (outrun), unless it's a timing problem
-    if (line_counter_interrupt-- <= 0)
+    if (--line_counter_interrupt < 0)
     {
-        if (REG0_LINE_INTERRUPT)
+        if (REG0_LINE_INTERRUPT && vcounter <= 224)
         {
             mem_log("VDP", "HINTERRUPT (vcounter: %d, new counter: %d)\n", vcounter, REG10_LINE_COUNTER);
             m68k_set_irq(M68K_IRQ_4);
+            hirq = true;
         }
 
         line_counter_interrupt = REG10_LINE_COUNTER;
