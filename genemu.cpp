@@ -66,6 +66,11 @@ int main(int argc, char *argv[])
         int pitch;
         hw_beginframe(&screen, &pitch);
 
+        int16_t *audio;
+        hw_beginaudio(&audio);
+        int audio_index = 0;
+        int audio_step = (HW_AUDIO_NUMSAMPLES << 16) / VDP_SCANLINES;
+
         for (int sl=0;sl<VDP_SCANLINES;++sl)
         {
             if (sl == 0xE0)
@@ -76,14 +81,14 @@ int main(int argc, char *argv[])
 
             vdp_scanline(screen);
             screen += pitch;
+
+            YM2612Update(audio + (audio_index>>16)*2, HW_AUDIO_NUMSAMPLES/VDP_SCANLINES);
+            audio_index += audio_step;
+
             MASTER_CLOCK += VDP_CYCLES_PER_LINE;
         }
 
-        int16_t *audio;
-        hw_beginaudio(&audio);
-        YM2612Update(audio, HW_AUDIO_NUMSAMPLES);
         hw_endaudio();
-
         hw_endframe();
         ++framecounter;
     }
