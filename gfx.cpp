@@ -19,7 +19,7 @@ private:
     void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int pri);
     void draw_pattern(uint8_t *screen, uint16_t name, int paty);
     void draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty);
-    void draw_plane_ab(uint8_t *screen, int line, int ntaddr, int hs, int vs);
+    void draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t hs, uint16_t vs);
     void draw_plane_w(uint8_t *screen, int y);
     void draw_sprites(uint8_t *screen, int line);
 
@@ -113,39 +113,41 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
     draw_nametable(screen, VDP.VRAM + addr_w + row*2*screen_width()/8, screen_width()/8, paty);
 }
 
-void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, int scrollx, int scrolly)
+void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx, uint16_t scrolly)
 {
-    int ntwidth = BITS(VDP.regs[16], 0, 2);
-    int ntheight = BITS(VDP.regs[16], 4, 2);
-    int screen_cols = screen_width() / 8;
+    uint8_t *end = screen + screen_width()*4;
+    uint16_t ntwidth = BITS(VDP.regs[16], 0, 2);
+    uint16_t ntheight = BITS(VDP.regs[16], 4, 2);
+    uint16_t ntw_mask, nth_mask;
 
     assert(ntwidth != 2);  // invalid setting
     assert(ntheight != 2); // invalid setting
 
     ntwidth  = (ntwidth + 1) * 32;
     ntheight = (ntheight + 1) * 32;
+    ntw_mask = ntwidth - 1;
+    nth_mask = ntheight - 1;
 
-    scrollx %= ntwidth*8;
+    // Invert horizontal scrolling (because it goes right, but we need to offset of the first screen pixel)
+    scrollx = -scrollx;
+
+    // Calculate vertical scrolling for the current line
     scrolly += line;
-    scrolly %= ntheight*8;
 
-    int row = scrolly >> 3;
-    int paty = scrolly & 7;
+    uint8_t row = (scrolly >> 3) & nth_mask;
+    uint8_t col = (scrollx >> 3) & ntw_mask;
 
-    if (scrollx < screen_width())
+    uint8_t patx = scrollx & 7;
+    uint8_t paty = scrolly & 7;
+
+    uint8_t *nt = VDP.VRAM + ntaddr + row*(2*ntwidth);
+
+    screen -= patx*4;
+    while (screen < end)
     {
-        int num_cols = (screen_width() - scrollx + 7) / 8;
-        draw_nametable(screen + scrollx*4, VDP.VRAM + ntaddr + row*(2*ntwidth), num_cols, paty);
-    }
-
-    if (scrollx > 0)
-    {
-        scrollx -= ntwidth*8;
-        int col = (-scrollx) / 8;
-        int patx = (-scrollx) & 7;
-        assert(col >= 0 && col < ntwidth);
-        int num_cols = MIN(ntwidth - col, screen_width()/8 + 1);
-        draw_nametable(screen - patx*4, VDP.VRAM + ntaddr + row*(2*ntwidth) + col*2, num_cols, paty);
+        draw_pattern(screen, (nt[col*2] << 8) | nt[col*2+1], paty);
+        col = (col + 1) & ntw_mask;
+        screen += 8*4;
     }
 }
 
