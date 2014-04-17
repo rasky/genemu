@@ -35,7 +35,7 @@ public:
     uint64_t clock();
     unsigned int PC() { return _cpu.PC.W; }
 
-    void set_reset_line(bool assert);
+    bool set_reset_line(bool assert);
     bool get_reset_line() { return _reset_line; };
 
     void set_busreq_line(bool assert);

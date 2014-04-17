@@ -149,7 +149,19 @@ static void io_mem_w8(unsigned int address, unsigned int value)
     {
         assert(activecpu == 0);
         CPU_Z80.sync();
-        CPU_Z80.set_reset_line(~value & 1);
+        if (CPU_Z80.set_reset_line(~value & 1))
+        {
+            FILE *f = fopen("z80.dmp", "w");
+            fwrite(ZRAM, 1, sizeof(ZRAM), f);
+            fclose(f);
+        }
+        if (value & 1) {
+            // A Z80 reset happened on this write:
+            // reset also the YM2612 which is connected
+            // to the same reset trigger
+            YM2612ResetChip();
+            mem_log("YM2612", "Reset chip\n");
+        }
         return;
     }
 

@@ -81,10 +81,10 @@ void CpuZ80::set_busreq_line(bool line)
     mem_log("MEM", "Z80 BUSREQ: %d\n", line);
 }
 
-void CpuZ80::set_reset_line(bool line)
+bool CpuZ80::set_reset_line(bool line)
 {
     if (line == _reset_line)
-        return;
+        return false;
     _reset_line = line;
     mem_log("MEM", "Z80 RESET: %d (CLOCK: %d)\n", line, _clock);
     if (_reset_line)
@@ -100,10 +100,13 @@ void CpuZ80::set_reset_line(bool line)
             ResetZ80(&_cpu);
             _reset_once = true;
             _clock += 20*Z80_FREQ_DIVISOR;
+            return true;
         }
         else
             mem_log("Z80", "Reset ignored for too short pulse\n");
     }
+
+    return false;
 }
 
 
