@@ -122,8 +122,8 @@ static unsigned int io_mem_r8(unsigned int address)
 
 static unsigned int io_mem_r16(unsigned int address)
 {
-    mem_log("MEM", "read16 from I/O area: %04x\n", address);
-    return 0xFFFF;
+    return (io_mem_r8(address) << 8) | io_mem_r8(address | 1);
+
 }
 
 static void io_mem_w8(unsigned int address, unsigned int value)
