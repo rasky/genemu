@@ -77,6 +77,7 @@ void CpuZ80::irq(void)
 
 void CpuZ80::set_busreq_line(bool line)
 {
+    sync();
     _busreq_line = line;
     mem_log("MEM", "Z80 BUSREQ: %d\n", line);
 }
