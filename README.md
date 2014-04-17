@@ -11,6 +11,7 @@ What's emulated
 ===============
  * All the basics: CPUs, sprites, planes, DMA, etc.
  * Accurate Z80 RESET/BUSREQ process
+ * Correct sprite priority vs bkg
  * Wide resolution change (32 vs 40 cells)
  * FM sound (YM2612)
  * Basic HINTERRUPT emulation
@@ -21,7 +22,6 @@ Todo list
 The following is a rough list of missing features or things to be fixed:
 
  * Shadow / highlight mode
- * Correct sprite priority vs bkg
  * Correct hinterrupt / hv counter
  * SN7689 audio chip
  * PAL vs NTSC game detection
