@@ -19,7 +19,7 @@ private:
     void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int pri);
     void draw_pattern(uint8_t *screen, uint16_t name, int paty);
     void draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty);
-    void draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t hs, uint16_t vs);
+    void draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t hs, uint16_t *vsram);
     void draw_plane_w(uint8_t *screen, int y);
     void draw_sprites(uint8_t *screen, int line);
 
@@ -113,12 +113,17 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
     draw_nametable(screen, VDP.VRAM + addr_w + row*2*screen_width()/8, screen_width()/8, paty);
 }
 
-void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx, uint16_t scrolly)
+void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx, uint16_t *vsram)
 {
     uint8_t *end = screen + screen_width()*4;
     uint16_t ntwidth = BITS(VDP.regs[16], 0, 2);
     uint16_t ntheight = BITS(VDP.regs[16], 4, 2);
     uint16_t ntw_mask, nth_mask;
+    int numcell;
+    bool column_scrolling = BIT(VDP.regs[11], 2);
+
+    if (column_scrolling && line==0)
+        mem_log("SCROLL", "column scrolling\n");
 
     assert(ntwidth != 2);  // invalid setting
     assert(ntheight != 2); // invalid setting
@@ -130,24 +135,28 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx,
 
     // Invert horizontal scrolling (because it goes right, but we need to offset of the first screen pixel)
     scrollx = -scrollx;
-
-    // Calculate vertical scrolling for the current line
-    scrolly += line;
-
-    uint8_t row = (scrolly >> 3) & nth_mask;
     uint8_t col = (scrollx >> 3) & ntw_mask;
-
     uint8_t patx = scrollx & 7;
-    uint8_t paty = scrolly & 7;
 
-    uint8_t *nt = VDP.VRAM + ntaddr + row*(2*ntwidth);
-
+    numcell = 0;
     screen -= patx*4;
     while (screen < end)
     {
+         // Calculate vertical scrolling for the current line
+        uint16_t scrolly = (*vsram & 0x3FF) + line;
+        uint8_t row = (scrolly >> 3) & nth_mask;
+        uint8_t paty = scrolly & 7;
+        uint8_t *nt = VDP.VRAM + ntaddr + row*(2*ntwidth);
+
         draw_pattern(screen, (nt[col*2] << 8) | nt[col*2+1], paty);
+
         col = (col + 1) & ntw_mask;
         screen += 8*4;
+        numcell++;
+
+        // If per-column scrolling is active, increment VSRAM pointer
+        if (column_scrolling && (numcell & 1) == 0)
+            vsram += 2;
     }
 }
 
@@ -351,23 +360,15 @@ bool GFX::draw_scanline(uint8_t *screen, int line)
     int hsa, hsb;
     get_hscroll(line, &hsa, &hsb);
 
-    if (BIT(VDP.regs[11], 2))
-        assert(!"vertical scrolling per column");
-
-    int vsa, vsb;
-    vsa = VDP.VSRAM[0] & 0x3FF;
-    vsb = VDP.VSRAM[1] & 0x3FF;
-
     // Plane B
     if (!keystate[SDLK_b])
-        draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, vsb);
+        draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, VDP.VSRAM+1);
 
     // Plane A or W
     linew = false;
     if (winv) {
         if (winvdown && line >= winv*8)
         {
-            assert(!"winv down scroll");
             linew = true;
         }
         else if (!winvdown && line <= winv*8)
@@ -377,7 +378,7 @@ bool GFX::draw_scanline(uint8_t *screen, int line)
     }
 
     if (!linew && !keystate[SDLK_a])
-        draw_plane_ab(screen, line, VDP.get_nametable_A(), hsa, vsa);
+        draw_plane_ab(screen, line, VDP.get_nametable_A(), hsa, VDP.VSRAM);
 
     // Sprites
     if (!keystate[SDLK_s])
