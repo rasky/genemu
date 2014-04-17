@@ -16,6 +16,7 @@ extern int framecounter;
 #define REG3_NAMETABLE_W      (BITS(regs[3], 1, 5) << 11)
 #define REG4_NAMETABLE_B      (BITS(regs[4], 0, 3) << 13)
 #define REG10_LINE_COUNTER    BITS(regs[10], 0, 8)
+#define REG12_MODE_H40        BIT(regs[12], 7)
 #define REG15_DMA_INCREMENT   regs[15]
 #define REG19_DMA_LENGTH      (regs[19] | (regs[20] << 8))
 #define REG21_DMA_SRC_ADDRESS ((regs[21] | (regs[22] << 8) | ((regs[23] & 0x7F) << 16)) << 1)
@@ -23,13 +24,32 @@ extern int framecounter;
 
 class VDP VDP;
 
+// Return 9-bit accurate hcounter
 int VDP::hcounter(void)
 {
-    int cycles = m68k_cycles_run() * M68K_FREQ_DIVISOR;
+    int mclk = m68k_cycles_run() * M68K_FREQ_DIVISOR;
+    int pixclk = mclk / 10;
 
-    // FIXME: this must be fixed to take into account
-    // the real resolution of the screen
-    return cycles * 256 / VDP_CYCLES_PER_LINE;
+    // Accurate 9-bit hcounter emulation, from timing posted here:
+    // http://gendev.spritesmind.net/forum/viewtopic.php?p=17683#17683
+    if (REG12_MODE_H40)
+    {
+        enum { SPLIT_POINT = 13+320+14+2 };
+        if (pixclk < SPLIT_POINT)
+            pixclk += 0xD;
+        else
+            pixclk = pixclk - SPLIT_POINT + 0x1C9;
+    }
+    else
+    {
+        enum { SPLIT_POINT = 13+256+14+2 };
+        if (pixclk < SPLIT_POINT)
+            pixclk += 0xB;
+        else
+            pixclk = pixclk - SPLIT_POINT + 0x1D2;
+    }
+
+    return pixclk & 0x1FF;
 }
 
 void VDP::register_w(int reg, uint8_t value)
@@ -170,16 +190,20 @@ uint16_t VDP::status_register_r(void)
     status |= STATUS_FIFO_EMPTY;
 
     // VBLANK bit
-    if (vcounter == 224 && hc >= 0xAA)
-        status |= STATUS_VBLANK;
-    else if (vcounter > 224 && vcounter < 261)
-        status |= STATUS_VBLANK;
-    else if (vcounter == 261 && hc < 0xAA)
+    if (vcounter >= 224)
         status |= STATUS_VBLANK;
 
-    // HBLANK bit
-    if (hc < 8 && hc >= 228)
-        status |= STATUS_HBLANK;
+    // HBLANK bit (see Nemesis doc, as linked in hcounter())
+    if (REG12_MODE_H40)
+    {
+        if (hc < 0xA && hc >= 0x166)
+            status |= STATUS_HBLANK;
+    }
+    else
+    {
+        if (hc < 0x9 && hc >= 0x126)
+            status |= STATUS_HBLANK;
+    }
 
     // reading the status clears the pending flag for command words
     command_word_pending = false;
@@ -189,11 +213,10 @@ uint16_t VDP::status_register_r(void)
 
 uint16_t VDP::hvcounter_r16(void)
 {
-    int hc = hcounter();
+    int hc = hcounter() >> 1;
     int vc = vcounter;
 
     if (vc >= 0xEA) vc -= 0xEA - 0xE5;
-    if (hc >= 0xE9) hc -= 0xE9 - 0x93;
     assert(vc < 256);
     assert(hc < 256);
 
