@@ -19,6 +19,7 @@ private:
     uint16_t CRAM[0x40];
     uint16_t VSRAM[0x40];  // only 40 words are really used
     uint8_t regs[0x20];
+    uint16_t fifo[4];
     uint16_t address_reg;
     uint8_t code_reg;
     uint16_t status_reg;
@@ -33,6 +34,7 @@ private:
     void dma_trigger();
     void dma_fill(uint16_t value);
     void dma_m68k();
+    void push_fifo(uint16_t value);
 
     int get_nametable_A();
     int get_nametable_B();

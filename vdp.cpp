@@ -61,24 +61,28 @@ void VDP::register_w(int reg, uint8_t value)
     code_reg = 0;
 }
 
+
+void VDP::push_fifo(uint16_t value)
+{
+    fifo[3] = fifo[2];
+    fifo[2] = fifo[1];
+    fifo[1] = fifo[0];
+    fifo[0] = value;
+}
+
 void VDP::data_port_w16(uint16_t value)
 {
     command_word_pending = false;
 
-    // When a DMA fill is pending, the value sent to the
-    // data port is the actual fill value and triggers the fill
-    if (dma_fill_pending)
-    {
-        dma_fill_pending = false;
-        dma_fill(value);
-        return;
-    }
+    push_fifo(value);
 
     switch (code_reg & 0xF)
     {
+    case 0x9:
+        mem_log("WARNING", "data port w16: code:%x, addr:%x\n", code_reg, address_reg);
     case 0x1:
-        mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%d\n",
-            address_reg, REG15_DMA_INCREMENT, vcounter);
+        // mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%d\n",
+        //     address_reg, REG15_DMA_INCREMENT, vcounter);
         VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
         VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
         address_reg += REG15_DMA_INCREMENT;
@@ -105,29 +109,54 @@ void VDP::data_port_w16(uint16_t value)
         fprintf(stdout, "[VDP][PC=%06x](%04d) invalid data port write16: code:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg);
         assert(!"data port w not handled");
     }
+
+    // When a DMA fill is pending, the value sent to the
+    // data port is the actual fill value and triggers the fill
+    if (dma_fill_pending)
+    {
+        dma_fill_pending = false;
+        dma_fill(value);
+        return;
+    }
 }
 
 uint16_t VDP::data_port_r16(void)
 {
+    enum { CRAM_BITMASK = 0x0EEE, VSRAM_BITMASK = 0x07FF, VRAM8_BITMASK = 0x00FF };
     uint16_t value;
 
     command_word_pending = false;
+    mem_log("VDP", "data port r16: code:%x, addr:%x\n", code_reg, address_reg);
 
     switch (code_reg & 0xF)
     {
     case 0x0:
-        // Check if byteswap happens when reading or not
-        assert((address_reg & 1) == 0);
-        value =  VRAM[(address_reg    ) & 0xFFFF] << 8;
-        value |= VRAM[(address_reg ^ 1) & 0xFFFF];
+        // No byteswapping here, see vdpfifotesting
+        value =  VRAM[(address_reg    ) & 0xFFFE] << 8;
+        value |= VRAM[(address_reg | 1) & 0xFFFF];
         address_reg += REG15_DMA_INCREMENT;
         address_reg &= 0xFFFF;
         return value;
 
-    case 0x8:
-        value = CRAM[(address_reg >> 1) & 0x3F];
+    case 0x4:
+        value = VSRAM[(address_reg >> 1) & 0x3F];
+        value = (value & VSRAM_BITMASK) | (fifo[3] & ~VSRAM_BITMASK);
         address_reg += REG15_DMA_INCREMENT;
         address_reg &= 0x7F;
+        return value;
+
+    case 0x8:
+        value = CRAM[(address_reg >> 1) & 0x3F];
+        value = (value & CRAM_BITMASK) | (fifo[3] & ~CRAM_BITMASK);
+        address_reg += REG15_DMA_INCREMENT;
+        address_reg &= 0x7F;
+        return value;
+
+    case 0xC: // undocumented 8-bit VRAM access, see vdpfifotesting
+        value = VRAM[(address_reg ^ 1) & 0xFFFF];
+        value = (value & VRAM8_BITMASK) | (fifo[3] & ~VRAM8_BITMASK);
+        address_reg += REG15_DMA_INCREMENT;
+        address_reg &= 0xFFFF;
         return value;
 
     default:
@@ -260,6 +289,8 @@ void VDP::scanline(uint8_t* screen)
     gfx_draw_scanline(screen, vcounter);
 }
 
+
+
 /**************************************************************
  * DMA
  **************************************************************/
@@ -301,10 +332,8 @@ void VDP::dma_fill(uint16_t value)
     case 0x1:
         mem_log("VDP", "DMA VRAM fill: address:%04x, increment:%04x, length:%x, value: %04x\n",
             address_reg, REG15_DMA_INCREMENT, length, value);
-        VRAM[address_reg & 0xFFFF] = value & 0xFF;
         do {
             VRAM[(address_reg ^ 1) & 0xFFFF] = value >> 8;
-
             address_reg += REG15_DMA_INCREMENT;
         } while (--length);
         break;
@@ -337,6 +366,7 @@ void VDP::dma_m68k()
             int value = m68k_read_memory_16(src_addr);
             src_addr += 2;
             assert(src_addr < 0x01000000);
+            push_fifo(value);
             VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
             VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
             address_reg += REG15_DMA_INCREMENT;
@@ -350,6 +380,7 @@ void VDP::dma_m68k()
             src_addr += 2;
             assert(src_addr < 0x01000000);
             assert(address_reg < 0x80);
+            push_fifo(value);
             CRAM[(address_reg >> 1) & 0x3F] = value;
             address_reg += REG15_DMA_INCREMENT;
         } while (--length);
@@ -362,6 +393,7 @@ void VDP::dma_m68k()
             src_addr += 2;
             assert(src_addr < 0x01000000);
             assert(address_reg < 0x80);
+            push_fifo(value);
             VSRAM[(address_reg >> 1) & 0x3F] = value;
             address_reg += REG15_DMA_INCREMENT;
         } while (--length);
@@ -411,6 +443,13 @@ void vdp_mem_w16(unsigned int address, unsigned int value)
         case 0x4:
         case 0x6: VDP.control_port_w(value); return;
 
+        // unused register, see vdpfifotesting
+        case 0x18:
+            return;
+        // debug register
+        case 0x1C:
+            return;
+
         default:
             fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled write16 IO:%02x val:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F, value);
             assert(!"unhandled vdp_mem_w16");
@@ -441,6 +480,12 @@ unsigned int vdp_mem_r16(unsigned int address)
         case 0xA:
         case 0xC:
         case 0xE: return VDP.hvcounter_r16();
+
+        // unused register, see vdpfifotesting
+        case 0x18: return 0xFF;
+
+        // debug register
+        case 0x1C: return 0xFF;
 
         default:
             fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled read16 IO:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F);
