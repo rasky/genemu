@@ -54,11 +54,16 @@ int VDP::hcounter(void)
 
 void VDP::register_w(int reg, uint8_t value)
 {
+    // Mode4 is not emulated yet. Anyway, access to registers > 0xA is blocked.
+    if (!BIT(regs[0x1], 2) && reg > 0xA) return;
+
     regs[reg] = value;
     fprintf(stdout, "[VDP][PC=%06x](%04d) reg:%02d <- %02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, reg, value);
 
-    // Writing a register clear the codereg (sonic3d intro wrong colors)
-    code_reg = 0;
+    // Writing a register clear the first command word
+    // (see sonic3d intro wrong colors, and vdpfifotesting)
+    code_reg &= ~0x3;
+    address_reg &= ~0x3FFF;
 }
 
 
@@ -78,31 +83,30 @@ void VDP::data_port_w16(uint16_t value)
 
     switch (code_reg & 0xF)
     {
-    case 0x9:
-        mem_log("WARNING", "data port w16: code:%x, addr:%x\n", code_reg, address_reg);
     case 0x1:
         // mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%d\n",
         //     address_reg, REG15_DMA_INCREMENT, vcounter);
         VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
         VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
         address_reg += REG15_DMA_INCREMENT;
-        address_reg &= 0xFFFF;
         break;
     case 0x3:
         CRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
-        address_reg &= 0x7F;
         break;
     case 0x5:
         VSRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
-        address_reg &= 0x7F;
         break;
 
     case 0x0:
     case 0x4:
     case 0x8:
         // Write operation after setting up read: ignored (ex: ecco2, aladdin)
+        break;
+
+    case 0x9:
+        // invalid, ignore (vdpfifotesting)
         break;
 
     default:
