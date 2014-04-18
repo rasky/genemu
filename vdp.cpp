@@ -13,6 +13,7 @@ extern int framecounter;
 #define REG0_LINE_INTERRUPT   BIT(regs[0], 4)
 #define REG1_DMA_ENABLED      BIT(regs[1], 4)
 #define REG1_VBLANK_INTERRUPT BIT(regs[1], 5)
+#define REG1_DISP_ENABLED     BIT(regs[1], 6)
 #define REG2_NAMETABLE_A      (BITS(regs[2], 3, 3) << 13)
 #define REG3_NAMETABLE_W      (BITS(regs[3], 1, 5) << 11)
 #define REG4_NAMETABLE_B      (BITS(regs[4], 0, 3) << 13)
@@ -29,24 +30,26 @@ class VDP VDP;
 int VDP::hcounter(void)
 {
     int mclk = m68k_cycles_run() * M68K_FREQ_DIVISOR;
-    int pixclk = mclk / 10;
+    int pixclk;
 
     // Accurate 9-bit hcounter emulation, from timing posted here:
     // http://gendev.spritesmind.net/forum/viewtopic.php?p=17683#17683
     if (REG12_MODE_H40)
     {
+        pixclk = mclk * 420 / VDP_CYCLES_PER_LINE;
+        mem_log("HCOUNTER", "mclk:%d pixclk:%d\n", mclk, pixclk);
         enum { SPLIT_POINT = 13+320+14+2 };
-        if (pixclk < SPLIT_POINT)
-            pixclk += 0xD;
-        else
+        pixclk += 0xD;
+        if (pixclk >= SPLIT_POINT)
             pixclk = pixclk - SPLIT_POINT + 0x1C9;
+        mem_log("HCOUNTER", "final:%x\n", pixclk);
     }
     else
     {
+        pixclk = mclk * 342 / VDP_CYCLES_PER_LINE;
         enum { SPLIT_POINT = 13+256+14+2 };
-        if (pixclk < SPLIT_POINT)
-            pixclk += 0xB;
-        else
+        pixclk += 0xB;
+        if (pixclk >= SPLIT_POINT)
             pixclk = pixclk - SPLIT_POINT + 0x1D2;
     }
 
@@ -240,18 +243,18 @@ uint16_t VDP::status_register_r(void)
     status |= STATUS_FIFO_EMPTY;
 
     // VBLANK bit
-    if (vcounter >= 224)
+    if (vcounter >= 224 || !REG1_DISP_ENABLED)
         status |= STATUS_VBLANK;
 
     // HBLANK bit (see Nemesis doc, as linked in hcounter())
     if (REG12_MODE_H40)
     {
-        if (hc < 0xA && hc >= 0x166)
+        if (hc < 0xA || hc >= 0x166)
             status |= STATUS_HBLANK;
     }
     else
     {
-        if (hc < 0x9 && hc >= 0x126)
+        if (hc < 0x9 || hc >= 0x126)
             status |= STATUS_HBLANK;
     }
 
