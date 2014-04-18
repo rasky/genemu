@@ -9,6 +9,7 @@ extern "C" {
 }
 extern int framecounter;
 
+#define REG0_HVLATCH          BIT(regs[0], 1)
 #define REG0_LINE_INTERRUPT   BIT(regs[0], 4)
 #define REG1_DMA_ENABLED      BIT(regs[1], 4)
 #define REG1_VBLANK_INTERRUPT BIT(regs[1], 5)
@@ -64,6 +65,22 @@ void VDP::register_w(int reg, uint8_t value)
     // (see sonic3d intro wrong colors, and vdpfifotesting)
     code_reg &= ~0x3;
     address_reg &= ~0x3FFF;
+
+    // Here we handle only cases where the register write
+    // has an immediate effect on VDP.
+    switch (reg)
+    {
+        case 0:
+            if (REG0_HVLATCH && !hvcounter_latched)
+            {
+                hvcounter_latch = hvcounter_r16();
+                hvcounter_latched = true;
+            }
+            else if (!REG0_HVLATCH && hvcounter_latched)
+                hvcounter_latched = false;
+            break;
+    }
+
 }
 
 
@@ -246,6 +263,9 @@ uint16_t VDP::status_register_r(void)
 
 uint16_t VDP::hvcounter_r16(void)
 {
+    if (hvcounter_latched)
+        return hvcounter_latch;
+
     int hc = hcounter() >> 1;
     int vc = vcounter;
 
@@ -419,6 +439,7 @@ void VDP::reset()
     vcounter = 0;
     status_reg = 0x3C00;
     line_counter_interrupt = 0;
+    hvcounter_latched = false;
 }
 
 void vdp_mem_w8(unsigned int address, unsigned int value)

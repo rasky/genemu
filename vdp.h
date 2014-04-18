@@ -27,6 +27,8 @@ private:
     int line_counter_interrupt;
     bool command_word_pending;
     bool dma_fill_pending;
+    bool hvcounter_latched;
+    uint16_t hvcounter_latch;
 
 private:
     void register_w(int reg, uint8_t value);
