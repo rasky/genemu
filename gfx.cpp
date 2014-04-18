@@ -14,10 +14,11 @@ extern "C" {
 class GFX
 {
 private:
-    void draw_pixel(uint8_t *screen, uint16_t rgb, int pri, bool check_pri);
-    template <bool fliph>
-    void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int pri, bool check_pri);
-    void draw_pattern(uint8_t *screen, uint16_t name, int paty, bool check_pri);
+    void draw_pixel(uint8_t *screen, uint16_t rgb, int pri, int draw_command);
+    template <bool fliph, int draw_command>
+    void draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int pri);
+    template <int draw_command>
+    void draw_pattern(uint8_t *screen, uint16_t name, int paty);
     void draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty);
     void draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t hs, uint16_t *vsram);
     void draw_plane_w(uint8_t *screen, int y);
@@ -32,25 +33,42 @@ public:
 
 } GFX;
 
+
+#define DRAW_ALWAYS             0    // draw all the pixels
+#define DRAW_DONT_OVERWRITE     1    // draw only if not already drawn
+#define DRAW_MAX_PRIORITY       2    // draw only if priority >= pixel drawn
+
+
 #define COLOR_3B_TO_8B(c)  (((c) << 5) | ((c) << 2) | ((c) >> 1))
 #define CRAM_R(c)          COLOR_3B_TO_8B(BITS((c), 1, 3))
 #define CRAM_G(c)          COLOR_3B_TO_8B(BITS((c), 5, 3))
 #define CRAM_B(c)          COLOR_3B_TO_8B(BITS((c), 9, 3))
 
 
-inline void GFX::draw_pixel(uint8_t *screen, uint16_t rgb, int pri, bool check_pri)
+inline void GFX::draw_pixel(uint8_t *screen, uint16_t rgb, int pri, int draw_command)
 {
-    if (!check_pri || pri >= screen[3])
+    switch (draw_command)
     {
-        screen[0] = CRAM_R(rgb);
-        screen[1] = CRAM_G(rgb);
-        screen[2] = CRAM_B(rgb);
-        screen[3] = pri;
+    case DRAW_ALWAYS:
+        break;
+    case DRAW_DONT_OVERWRITE:
+        if (screen[3] != 0xFF)
+            return;
+        break;
+    case DRAW_MAX_PRIORITY:
+        if (pri < screen[3])
+            return;
+        break;
     }
+
+    screen[0] = CRAM_R(rgb);
+    screen[1] = CRAM_G(rgb);
+    screen[2] = CRAM_B(rgb);
+    screen[3] = pri;
 }
 
-template <bool fliph>
-void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int pri, bool check_pri)
+template <bool fliph, int draw_command>
+void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int pri)
 {
     if (fliph)
         pattern += 3;
@@ -61,8 +79,8 @@ void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int
         uint8_t pix1 = !fliph ? pix>>4 : pix&0xF;
         uint8_t pix2 = !fliph ? pix&0xF : pix>>4;
 
-        if (pix1) draw_pixel(screen+0, palette[pix1], pri, check_pri);
-        if (pix2) draw_pixel(screen+4, palette[pix2], pri, check_pri);
+        if (pix1) draw_pixel(screen+0, palette[pix1], pri, draw_command);
+        if (pix2) draw_pixel(screen+4, palette[pix2], pri, draw_command);
 
         if (fliph)
             pattern--;
@@ -72,7 +90,9 @@ void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint16_t *palette, int
     }
 }
 
-void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty, bool check_pri)
+
+template <int draw_command>
+void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty)
 {
     int pat_idx = BITS(name, 0, 11);
     int pat_fliph = BITS(name, 11, 1);
@@ -89,10 +109,10 @@ void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty, bool check_pri)
 
     if (!pat_fliph)
     {
-        draw_pattern<false>(screen, pattern, palette, pat_pri, check_pri);
+        draw_pattern<false, draw_command>(screen, pattern, palette, pat_pri);
     }
     else
-        draw_pattern<true>(screen, pattern, palette, pat_pri, check_pri);
+        draw_pattern<true, draw_command>(screen, pattern, palette, pat_pri);
 }
 
 
@@ -100,7 +120,7 @@ void GFX::draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty)
 {
     for (int i = 0; i < numcols; ++i)
     {
-        draw_pattern(screen, (nt[0] << 8) | nt[1], paty, true);
+        draw_pattern<DRAW_MAX_PRIORITY>(screen, (nt[0] << 8) | nt[1], paty);
         nt += 2;
         screen += 32;
     }
@@ -150,7 +170,7 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx,
         uint8_t paty = scrolly & 7;
         uint8_t *nt = VDP.VRAM + ntaddr + row*(2*ntwidth);
 
-        draw_pattern(screen, (nt[col*2] << 8) | nt[col*2+1], paty, true);
+        draw_pattern<DRAW_MAX_PRIORITY>(screen, (nt[col*2] << 8) | nt[col*2+1], paty);
 
         col = (col + 1) & ntw_mask;
         screen += 8*4;
@@ -174,8 +194,15 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     uint8_t *buffer = sprite_buffer+OVERFLOW*4;
     memset(sprite_buffer, 0xFF, sizeof(sprite_buffer));
 
+    // This is both the size of the table as seen by the VDP
+    // *and* the maximum number of sprites that are processed
+    // (important in case of infinite loops in links).
+    const int SPRITE_TABLE_SIZE     = (screen_width() == 320) ?  80 :  64;
+    const int MAX_SPRITES_PER_LINE  = (screen_width() == 320) ?  20 :  16;
+    const int MAX_PIXELS_PER_LINE   = (screen_width() == 320) ? 320 : 256;
+
 #if 0
-    if (line == 0)
+    if (line == 66)
     {
         sidx = 0;
         for (int i = 0; i < 64; ++i)
@@ -190,8 +217,8 @@ void GFX::draw_sprites(uint8_t *screen, int line)
             int sx = ((table[6] & 0x3) << 8) | table[7];
             int link = BITS(table[3], 0, 7);
 
-            mem_log("SPRITE", "%d (sx:%d, sy:%d sz:%d,%d, name:%04x)\n",
-                    sidx, sx, sy, sw*8, sh*8, name);
+            mem_log("SPRITE", "%d (sx:%d, sy:%d sz:%d,%d, name:%04x, link:%02x)\n",
+                    sidx, sx, sy, sw*8, sh*8, name, link);
 
             if (link == 0) break;
             sidx = link;
@@ -199,8 +226,10 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     }
 #endif
 
+    bool masking = false;
+    bool one_sprite_nonzero = false;
     sidx = 0; ns = 0; num_pixels = 0;
-    for (int i = 0; i < 64; ++i)
+    for (int i = 0; i < SPRITE_TABLE_SIZE && sidx < SPRITE_TABLE_SIZE; ++i)
     {
         uint8_t *table = start_table + sidx*8;
         int sy = ((table[0] & 0x3) << 8) | table[1];
@@ -209,40 +238,44 @@ void GFX::draw_sprites(uint8_t *screen, int line)
         int sw = BITS(table[2], 2, 2) + 1;
         int sx = ((table[6] & 0x3) << 8) | table[7];
 
-        // Sprite masking: a sprite with X=0 blocks other lower-priority
-        // sprites on the same line.
-        if (line == 0 && (sx == 0 || sx == 1))
-            mem_log("SPRITE", "Unimplemented: sprite masking\n");
-
         sy -= 128;
         if (line >= sy && line < sy+sh*8)
         {
-            indices[ns++] = sidx;
+            if (!masking)
+                indices[ns++] = sidx;
             num_pixels += sw*8;
 
-            // Enforce sprite limits per scanline (depend on the resolution)
-            if (screen_width() == 320)
+            if (ns >= MAX_SPRITES_PER_LINE)
+                break;
+            if (num_pixels >= MAX_PIXELS_PER_LINE)
             {
-                if (ns >= 20 || num_pixels >= 320)
-                    break;
-            }
-            else
-            {
-                if (ns >= 16 || num_pixels >= 256)
-                    break;
+                VDP.sprite_overflow = line;
+                break;
             }
 
             // Sprite masking: a sprite on column 0 masks
-            // any lower-priority sprite (ex: sunsetriders)
+            // any lower-priority sprite, but with the following conditions
+            //   * it only works from the second visible sprite on each line
+            //   * if the previous line had a sprite pixel overflow, it
+            //     works even on the first sprite
+            // Notice that we need to continue parsing the table after masking
+            // to see if we reach a pixel overflow (because it would affect masking
+            // on next line).
             if (sx == 0)
-                break;
+            {
+                if (one_sprite_nonzero || VDP.sprite_overflow == line-1)
+                    masking = true;
+            }
+            else
+                one_sprite_nonzero = true;
         }
 
         if (link == 0) break;
         sidx = link;
     }
 
-    for (int i=ns-1;i>=0;i--)
+    num_pixels = 0;
+    for (int i=0; i<ns; ++i)
     {
         uint8_t *table = start_table + indices[i]*8;
         int sy = ((table[0] & 0x3) << 8) | table[1];
@@ -269,15 +302,18 @@ void GFX::draw_sprites(uint8_t *screen, int line)
             name += row;
             if (fliph)
                 name += sh*(sw-1);
-            for (int p=0;p<sw;p++)
+            for (int p=0;p<sw && num_pixels < MAX_PIXELS_PER_LINE;p++)
             {
-                draw_pattern(buffer + (sx+p*8)*4, name, paty, false);
+                draw_pattern<DRAW_DONT_OVERWRITE>(buffer + (sx+p*8)*4, name, paty);
                 if (!fliph)
                     name += sh;
                 else
                     name -= sh;
+                num_pixels += 8;
             }
         }
+        else
+            num_pixels += sw*8;
     }
 
     // Mix sprite buffer into the destination buffer

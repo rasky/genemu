@@ -258,6 +258,9 @@ uint16_t VDP::status_register_r(void)
             status |= STATUS_HBLANK;
     }
 
+    if (sprite_overflow)
+        status |= STATUS_SPRITEOVERFLOW;
+
     // reading the status clears the pending flag for command words
     command_word_pending = false;
 
@@ -285,7 +288,10 @@ void VDP::scanline(uint8_t* screen)
 
     vcounter++;
     if (vcounter == 262)
+    {
         vcounter = 0;
+        sprite_overflow = 0;
+    }
 
     // On these linese, the line counter interrupt is reloaded
     if (vcounter == 0 || (vcounter >= 225 && vcounter <= 261))
@@ -341,7 +347,7 @@ void VDP::dma_trigger()
             break;
 
         case 3:
-            assert(!"not implemented: VRAM copy");
+            //assert(!"not implemented: VRAM copy");
             break;
     }
 }
@@ -365,10 +371,18 @@ void VDP::dma_fill(uint16_t value)
         } while (--length);
         break;
     case 0x3:
-        assert(!"not implemented: DMA fill CRAM");
+        do {
+            CRAM[address_reg & 0x3F] = value;
+            address_reg += REG15_DMA_INCREMENT;
+        } while (--length);
+        //assert(!"not implemented: DMA fill CRAM");
         break;
     case 0x5:
-        assert(!"not implemented: DMA fill VSRAM");
+        do {
+            VSRAM[address_reg & 0x3F] = value;
+            address_reg += REG15_DMA_INCREMENT;
+        } while (--length);
+        // assert(!"not implemented: DMA fill VSRAM");
         break;
     default:
         mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
@@ -406,7 +420,6 @@ void VDP::dma_m68k()
             int value = m68k_read_memory_16(src_addr);
             src_addr += 2;
             assert(src_addr < 0x01000000);
-            assert(address_reg < 0x80);
             push_fifo(value);
             CRAM[(address_reg >> 1) & 0x3F] = value;
             address_reg += REG15_DMA_INCREMENT;
@@ -419,7 +432,6 @@ void VDP::dma_m68k()
             int value = m68k_read_memory_16(src_addr);
             src_addr += 2;
             assert(src_addr < 0x01000000);
-            assert(address_reg < 0x80);
             push_fifo(value);
             VSRAM[(address_reg >> 1) & 0x3F] = value;
             address_reg += REG15_DMA_INCREMENT;

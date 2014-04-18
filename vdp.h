@@ -29,6 +29,7 @@ private:
     bool dma_fill_pending;
     bool hvcounter_latched;
     uint16_t hvcounter_latch;
+    int sprite_overflow;
 
 private:
     void register_w(int reg, uint8_t value);
