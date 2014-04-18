@@ -333,6 +333,11 @@ void m68k_write_memory_32(unsigned int address, unsigned int value)
     m68k_write_memory<uint16_t>(address, value >> 16);
     m68k_write_memory<uint16_t>(address+2, value & 0xFFFF);
 }
+void m68k_write_memory_32_pd(unsigned int address, unsigned int value)
+{
+    m68k_write_memory<uint16_t>(address+2, value & 0xFFFF);
+    m68k_write_memory<uint16_t>(address, value >> 16);
+}
 
 void WrZ80(register word Addr,register byte Value)
 {

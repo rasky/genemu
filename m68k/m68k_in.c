@@ -6374,7 +6374,7 @@ M68KMAKE_OP(move, 32, pd, d)
 	uint res = DY;
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -6388,7 +6388,7 @@ M68KMAKE_OP(move, 32, pd, a)
 	uint res = AY;
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -6402,7 +6402,7 @@ M68KMAKE_OP(move, 32, pd, .)
 	uint res = M68KMAKE_GET_OPER_AY_32;
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;

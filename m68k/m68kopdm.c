@@ -8649,7 +8649,7 @@ void m68k_op_move_32_pd_d(void)
 	uint res = DY;
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8663,7 +8663,7 @@ void m68k_op_move_32_pd_a(void)
 	uint res = AY;
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8677,7 +8677,7 @@ void m68k_op_move_32_pd_ai(void)
 	uint res = OPER_AY_AI_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8691,7 +8691,7 @@ void m68k_op_move_32_pd_pi(void)
 	uint res = OPER_AY_PI_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8705,7 +8705,7 @@ void m68k_op_move_32_pd_pd(void)
 	uint res = OPER_AY_PD_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8719,7 +8719,7 @@ void m68k_op_move_32_pd_di(void)
 	uint res = OPER_AY_DI_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8733,7 +8733,7 @@ void m68k_op_move_32_pd_ix(void)
 	uint res = OPER_AY_IX_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8747,7 +8747,7 @@ void m68k_op_move_32_pd_aw(void)
 	uint res = OPER_AW_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8761,7 +8761,7 @@ void m68k_op_move_32_pd_al(void)
 	uint res = OPER_AL_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8775,7 +8775,7 @@ void m68k_op_move_32_pd_pcdi(void)
 	uint res = OPER_PCDI_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8789,7 +8789,7 @@ void m68k_op_move_32_pd_pcix(void)
 	uint res = OPER_PCIX_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
@@ -8803,7 +8803,7 @@ void m68k_op_move_32_pd_i(void)
 	uint res = OPER_I_32();
 	uint ea = EA_AX_PD_32();
 
-	m68ki_write_32(ea, res);
+	m68ki_write_32_pd(ea, res);
 
 	FLAG_N = NFLAG_32(res);
 	FLAG_Z = res;
