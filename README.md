@@ -12,6 +12,7 @@ What's emulated
  * All the basics: CPUs, sprites, planes, DMA, etc.
  * Accurate Z80 RESET/BUSREQ process
  * Correct sprite priority vs bkg
+ * Correct sprite overflow and masking
  * Wide resolution change (32 vs 40 cells)
  * FM sound (YM2612)
  * Basic HINTERRUPT emulation
