@@ -21,7 +21,8 @@ extern int framecounter;
 #define REG12_MODE_H40        BIT(regs[12], 7)
 #define REG15_DMA_INCREMENT   regs[15]
 #define REG19_DMA_LENGTH      (regs[19] | (regs[20] << 8))
-#define REG21_DMA_SRC_ADDRESS ((regs[21] | (regs[22] << 8) | ((regs[23] & 0x7F) << 16)) << 1)
+#define REG21_DMA_SRCADDR_LOW (regs[21] | (regs[22] << 8))
+#define REG23_DMA_SRCADDR_HIGH ((regs[23] & 0x7F) << 16)
 #define REG23_DMA_TYPE        BITS(regs[23], 6, 2)
 
 class VDP VDP;
@@ -357,6 +358,10 @@ void VDP::dma_fill(uint16_t value)
     /* FIXME: should be done in parallel and non blocking */
     int length = REG19_DMA_LENGTH;
 
+    // This address is not required for fills,
+    // but it's still updated by the DMA engine.
+    uint16_t src_addr_low = REG21_DMA_SRCADDR_LOW;
+
     if (length == 0)
         length = 0xFFFF;
 
@@ -368,12 +373,14 @@ void VDP::dma_fill(uint16_t value)
         do {
             VRAM[(address_reg ^ 1) & 0xFFFF] = value >> 8;
             address_reg += REG15_DMA_INCREMENT;
+            src_addr_low++;
         } while (--length);
         break;
     case 0x3:
         do {
             CRAM[address_reg & 0x3F] = value;
             address_reg += REG15_DMA_INCREMENT;
+            src_addr_low++;
         } while (--length);
         //assert(!"not implemented: DMA fill CRAM");
         break;
@@ -381,65 +388,63 @@ void VDP::dma_fill(uint16_t value)
         do {
             VSRAM[address_reg & 0x3F] = value;
             address_reg += REG15_DMA_INCREMENT;
+            src_addr_low++;
         } while (--length);
         // assert(!"not implemented: DMA fill VSRAM");
         break;
     default:
         mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
     }
+
+    // Clear DMA length at the end of transfer
+    regs[19] = regs[20] = 0;
+
+    // Update DMA source address after end of transfer
+    regs[21] = src_addr_low & 0xFF;
+    regs[22] = src_addr_low >> 8;
 }
 
 void VDP::dma_m68k()
 {
     int length = REG19_DMA_LENGTH;
-    int src_addr = REG21_DMA_SRC_ADDRESS;
+    uint16_t src_addr_low = REG21_DMA_SRCADDR_LOW;
+    uint32_t src_addr_high = REG23_DMA_SRCADDR_HIGH;
 
     // Special case for length = 0 (ex: sonic3d)
     if (length == 0)
         length = 0xFFFF;
 
-    switch (code_reg & 0xF)
-    {
-    case 0x1:
-        mem_log("VDP", "DMA M68K->VRAM: src_addr:%06x dst_addr:%x length:%x increment:%d\n",
-            src_addr, address_reg, length, REG15_DMA_INCREMENT);
-        do {
-            int value = m68k_read_memory_16(src_addr);
-            src_addr += 2;
-            assert(src_addr < 0x01000000);
-            push_fifo(value);
-            VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
-            VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
-            address_reg += REG15_DMA_INCREMENT;
-        } while (--length);
-        break;
-    case 0x3:
-        mem_log("VDP", "DMA M68K->CRAM: src_addr:%06x dst_addr:%x length:%x increment:%d\n",
-            src_addr, address_reg, length, REG15_DMA_INCREMENT);
-        do {
-            int value = m68k_read_memory_16(src_addr);
-            src_addr += 2;
-            assert(src_addr < 0x01000000);
-            push_fifo(value);
-            CRAM[(address_reg >> 1) & 0x3F] = value;
-            address_reg += REG15_DMA_INCREMENT;
-        } while (--length);
-        break;
-    case 0x5:
-        mem_log("VDP", "DMA M68K->VSRAM: src_addr:%06x dst_addr:%x length:%x increment:%d\n",
-            src_addr, address_reg, length, REG15_DMA_INCREMENT);
-        do {
-            int value = m68k_read_memory_16(src_addr);
-            src_addr += 2;
-            assert(src_addr < 0x01000000);
-            push_fifo(value);
-            VSRAM[(address_reg >> 1) & 0x3F] = value;
-            address_reg += REG15_DMA_INCREMENT;
-        } while (--length);
-        break;
-    default:
-        mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
-    }
+    do {
+        unsigned int value = m68k_read_memory_16((src_addr_high | src_addr_low) << 1);
+        push_fifo(value);
+
+        switch (code_reg & 0xF) {
+            case 0x1:
+                VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
+                VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
+                break;
+            case 0x3:
+                CRAM[(address_reg >> 1) & 0x3F] = value;
+                break;
+            case 0x5:
+                VSRAM[(address_reg >> 1) & 0x3F] = value;
+                break;
+            default:
+                mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
+                break;
+        }
+
+        address_reg += REG15_DMA_INCREMENT;
+        src_addr_low += 1;
+
+    } while (--length);
+
+    // Update DMA source address after end of transfer
+    regs[21] = src_addr_low & 0xFF;
+    regs[22] = src_addr_low >> 8;
+
+    // Clear DMA length at the end of transfer
+    regs[19] = regs[20] = 0;
 }
 
 int VDP::get_nametable_A() { return REG2_NAMETABLE_A; }
