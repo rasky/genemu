@@ -33,6 +33,7 @@ public:
 
 } GFX;
 
+#define FORCE_INLINE            __attribute__((always_inline))
 
 #define DRAW_ALWAYS             0    // draw all the pixels
 #define DRAW_DONT_OVERWRITE     1    // draw only if not already drawn
@@ -44,8 +45,7 @@ public:
 #define CRAM_G(c)          COLOR_3B_TO_8B(BITS((c), 5, 3))
 #define CRAM_B(c)          COLOR_3B_TO_8B(BITS((c), 9, 3))
 
-
-inline void GFX::draw_pixel(uint8_t *screen, uint16_t rgb, int pri, int draw_command)
+void FORCE_INLINE GFX::draw_pixel(uint8_t *screen, uint16_t rgb, int pri, int draw_command)
 {
     switch (draw_command)
     {
@@ -188,9 +188,6 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     static uint8_t sprite_buffer[(SCREEN_WIDTH+OVERFLOW*2)*4];
     int indices[64];
     uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & 0x7F) << 9);
-    int sidx;
-    int ns;
-    int num_pixels;
     uint8_t *buffer = sprite_buffer+OVERFLOW*4;
     memset(sprite_buffer, 0xFF, sizeof(sprite_buffer));
 
@@ -226,33 +223,23 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     }
 #endif
 
-    bool masking = false;
-    bool one_sprite_nonzero = false;
-    sidx = 0; ns = 0; num_pixels = 0;
+    bool masking = false, one_sprite_nonzero = false;
+    int sidx = 0, num_sprites = 0, num_pixels = 0;
     for (int i = 0; i < SPRITE_TABLE_SIZE && sidx < SPRITE_TABLE_SIZE; ++i)
     {
         uint8_t *table = start_table + sidx*8;
         int sy = ((table[0] & 0x3) << 8) | table[1];
         int sh = BITS(table[2], 0, 2) + 1;
         int link = BITS(table[3], 0, 7);
+        uint16_t name = (table[4] << 8) | table[5];
+        int flipv = BITS(name, 12, 1);
+        int fliph = BITS(name, 11, 1);
         int sw = BITS(table[2], 2, 2) + 1;
         int sx = ((table[6] & 0x3) << 8) | table[7];
 
         sy -= 128;
         if (line >= sy && line < sy+sh*8)
         {
-            if (!masking)
-                indices[ns++] = sidx;
-            num_pixels += sw*8;
-
-            if (ns >= MAX_SPRITES_PER_LINE)
-                break;
-            if (num_pixels >= MAX_PIXELS_PER_LINE)
-            {
-                VDP.sprite_overflow = line;
-                break;
-            }
-
             // Sprite masking: a sprite on column 0 masks
             // any lower-priority sprite, but with the following conditions
             //   * it only works from the second visible sprite on each line
@@ -268,52 +255,42 @@ void GFX::draw_sprites(uint8_t *screen, int line)
             }
             else
                 one_sprite_nonzero = true;
+
+            int row = (line - sy) >> 3;
+            int paty = (line - sy) & 7;
+            if (flipv)
+                row = sh - row - 1;
+
+            sx -= 128;
+            if (sx > -sw*8 && sx < screen_width() && !masking)
+            {
+                name += row;
+                if (fliph)
+                    name += sh*(sw-1);
+                for (int p=0;p<sw && num_pixels < MAX_PIXELS_PER_LINE;p++)
+                {
+                    draw_pattern<DRAW_DONT_OVERWRITE>(buffer + (sx+p*8)*4, name, paty);
+                    if (!fliph)
+                        name += sh;
+                    else
+                        name -= sh;
+                    num_pixels += 8;
+                }
+            }
+            else
+                num_pixels += sw*8;
+
+            if (num_pixels >= MAX_PIXELS_PER_LINE)
+            {
+                VDP.sprite_overflow = line;
+                break;
+            }
+            if (++num_sprites >= MAX_SPRITES_PER_LINE)
+                break;
         }
 
         if (link == 0) break;
         sidx = link;
-    }
-
-    num_pixels = 0;
-    for (int i=0; i<ns; ++i)
-    {
-        uint8_t *table = start_table + indices[i]*8;
-        int sy = ((table[0] & 0x3) << 8) | table[1];
-        int sh = BITS(table[2], 0, 2) + 1;
-        uint16_t name = (table[4] << 8) | table[5];
-        int flipv = BITS(name, 12, 1);
-        int fliph = BITS(name, 11, 1);
-        int sw = BITS(table[2], 2, 2) + 1;
-        int sx = ((table[6] & 0x3) << 8) | table[7];
-
-        sy -= 128;
-        sx -= 128;
-
-        assert(line >= sy && line < sy+sh*8);
-
-        int row = (line - sy) >> 3;
-        int paty = (line - sy) & 7;
-
-        if (flipv)
-            row = sh - row - 1;
-
-        if (sx > -sw*8 && sx < screen_width())
-        {
-            name += row;
-            if (fliph)
-                name += sh*(sw-1);
-            for (int p=0;p<sw && num_pixels < MAX_PIXELS_PER_LINE;p++)
-            {
-                draw_pattern<DRAW_DONT_OVERWRITE>(buffer + (sx+p*8)*4, name, paty);
-                if (!fliph)
-                    name += sh;
-                else
-                    name -= sh;
-                num_pixels += 8;
-            }
-        }
-        else
-            num_pixels += sw*8;
     }
 
     // Mix sprite buffer into the destination buffer
