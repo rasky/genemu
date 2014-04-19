@@ -321,7 +321,7 @@ void VDP::scanline(uint8_t* screen)
             m68k_set_irq(M68K_IRQ_6);
     }
 
-    gfx_draw_scanline(screen, vcounter);
+    gfx_render_scanline(screen, vcounter);
 }
 
 
