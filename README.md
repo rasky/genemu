@@ -17,6 +17,7 @@ What's emulated
  * FM sound (YM2612)
  * Basic HINTERRUPT emulation
  * Vertical cell scrolling through VSRAM
+ * Window horizontal clipping
 
 Todo list
 =========
@@ -26,5 +27,5 @@ The following is a rough list of missing features or things to be fixed:
  * Correct hinterrupt / hv counter
  * SN7689 audio chip
  * PAL vs NTSC game detection
- * Window horizontal clipping (and the infamous "window bug")
  * Accurate timing for DMA
+ * The infamous "window bug"
