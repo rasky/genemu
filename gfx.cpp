@@ -22,8 +22,8 @@ private:
     void draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty);
     void draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t hs, uint16_t *vsram);
     void draw_plane_w(uint8_t *screen, int y);
+    void draw_tiles(uint8_t *screen, int line);
     void draw_sprites(uint8_t *screen, int line);
-    bool draw_scanline(uint8_t *screen, int line);
 
     void get_hscroll(int line, int *hscroll_a, int *hscroll_b);
 
@@ -45,11 +45,17 @@ public:
 #define DRAW_NOT_ON_SPRITE      1    // draw only if the buffer doesn't contain a pixel from a sprite
 #define DRAW_MAX_PRIORITY       2    // draw only if priority >= pixel in the buffer
 
-
 #define COLOR_3B_TO_8B(c)  (((c) << 5) | ((c) << 2) | ((c) >> 1))
 #define CRAM_R(c)          COLOR_3B_TO_8B(BITS((c), 1, 3))
 #define CRAM_G(c)          COLOR_3B_TO_8B(BITS((c), 5, 3))
 #define CRAM_B(c)          COLOR_3B_TO_8B(BITS((c), 9, 3))
+
+#define MODE_SHI           BITS(VDP.regs[12], 3, 1)
+
+#define SHADOW_COLOR(r,g,b) \
+    do { r >>= 1; g >>= 1; b >>= 1; } while (0)
+#define HIGHLIGHT_COLOR(r,g,b) \
+    do { SHADOW_COLOR(r,g,b); r |= 0x80; g |= 0x80; b |= 0x80; } while(0)
 
 // True if the pixel is coming from a sprite (needed in shadow/highlight mode)
 #define PIXATTR_SPRITE     (1 << 6)
@@ -200,6 +206,10 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx,
 
 void GFX::draw_sprites(uint8_t *screen, int line)
 {
+    // Plane/sprite disable, show only backdrop
+    if (!BIT(VDP.regs[1], 6) || keystate[SDLK_s])
+        return;
+
     uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & 0x7F) << 9);
 
     // This is both the size of the table as seen by the VDP
@@ -355,13 +365,8 @@ void GFX::mix_offscreen_buffer(uint8_t *screen, uint8_t *buffer, int x, int w)
 }
 
 
-bool GFX::draw_scanline(uint8_t *screen, int line)
+void GFX::draw_tiles(uint8_t *screen, int line)
 {
-    if (BITS(VDP.regs[12], 1, 2) != 0)
-        assert(!"interlace mode");
-
-    if (line >= 224)
-        return false;
 
 #if 0
     if (line == 0) {
@@ -384,11 +389,6 @@ bool GFX::draw_scanline(uint8_t *screen, int line)
     }
 #endif
 
-    // Display enable
-    memset(screen, 0, SCREEN_WIDTH);
-    if (BIT(VDP.regs[0], 0))
-        return true;
-
     // Center display if horizontal resolution is smaller
     screen += screen_offset();
 
@@ -398,7 +398,7 @@ bool GFX::draw_scanline(uint8_t *screen, int line)
 
     // Plane/sprite disable, show only backdrop
     if (!BIT(VDP.regs[1], 6))
-        return true;
+        return;
 
     int hsa, hsb;
     get_hscroll(line, &hsa, &hsb);
@@ -457,56 +457,69 @@ bool GFX::draw_scanline(uint8_t *screen, int line)
         int ww = winh*16;
         mix_offscreen_buffer(screen, buffer, wx, ww);
     }
-
-    // Sprites
-    if (!keystate[SDLK_s])
-    {
-        uint8_t *buffer = get_offscreen_buffer();
-        draw_sprites(buffer, line);
-        mix_offscreen_buffer(screen, buffer, 0, screen_width());
-    }
-
-    // Copy backdrop on area outside the current resolution,
-    // so we overwrite any pattern overflow.
-    for (int x=0;x<screen_offset();x++)
-        draw_pixel(screen + -x, backdrop_color, 0, DRAW_ALWAYS);
-    for (int x=screen_width();x<SCREEN_WIDTH;x++)
-        draw_pixel(screen + x, backdrop_color, 0, DRAW_ALWAYS);
-
-    return true;
 }
 
 void GFX::render_scanline(uint8_t *screen, int line)
 {
-    bool SHI = BITS(VDP.regs[12], 3, 1);
-    if (SHI)
-        assert(!"shadow/highlight mode");
-
     // Overflow is the maximum size we can draw outside to avoid
     // wasting time and code in clipping. The maximum object is a 4x4 sprite,
     // so 32 pixels (on both side) is enough.
     enum { OVERFLOW = 32 };
+    uint8_t tile_buffer[SCREEN_WIDTH + OVERFLOW*2];
+    uint8_t sprite_buffer[SCREEN_WIDTH + OVERFLOW*2];
 
-    uint8_t buffer[SCREEN_WIDTH + OVERFLOW*2];
-    if (draw_scanline(buffer+OVERFLOW, line))
+    if (BITS(VDP.regs[12], 1, 2) != 0)
+        assert(!"interlace mode");
+
+    if (line >= 224)
+        return;
+
+    // Display enable
+    memset(screen, 0, SCREEN_WIDTH);
+    if (BIT(VDP.regs[0], 0))
+        return;
+
+    uint8_t *src1 = tile_buffer+OVERFLOW;
+    uint8_t *src2 = sprite_buffer+OVERFLOW;
+    uint16_t backdrop_color = VDP.CRAM[BITS(VDP.regs[7], 0, 6)];
+
+    memset(src1, 0, SCREEN_WIDTH);
+    memset(src2, 0, SCREEN_WIDTH);
+
+    draw_tiles(src1, line);
+    draw_sprites(src2, line);
+
+    for (int i=0; i<SCREEN_WIDTH; ++i)
     {
-        uint8_t *src = buffer+OVERFLOW;
-        uint8_t *dst = screen;
-
-        for (int i=0; i<SCREEN_WIDTH; ++i)
+        if (i < screen_offset() || i >= screen_offset() + screen_width())
         {
-            uint16_t rgb = VDP.CRAM[*src & 0x3F];
-            uint8_t r = CRAM_R(rgb);
-            uint8_t g = CRAM_G(rgb);
-            uint8_t b = CRAM_B(rgb);
-
-            *screen++ = r;
-            *screen++ = g;
-            *screen++ = b;
+            *screen++ = CRAM_R(backdrop_color);
+            *screen++ = CRAM_G(backdrop_color);
+            *screen++ = CRAM_B(backdrop_color);
             *screen++ = 0;
-
-            src++;
+            continue;
         }
+
+        uint8_t pix;
+        uint8_t tpix = *src1++;
+        uint8_t spix = *src2++;
+
+        if ((spix & 0x3F) && (tpix & PIXATTR_HIPRI) <= (spix & PIXATTR_HIPRI))
+            pix = spix;
+        else
+            pix = tpix;
+
+        uint8_t index = pix & 0x3F;
+        uint16_t rgb = VDP.CRAM[index];
+
+        uint8_t r = CRAM_R(rgb);
+        uint8_t g = CRAM_G(rgb);
+        uint8_t b = CRAM_B(rgb);
+
+        *screen++ = r;
+        *screen++ = g;
+        *screen++ = b;
+        *screen++ = 0;
     }
 }
 
@@ -517,3 +530,34 @@ void gfx_render_scanline(uint8_t *screen, int line)
 }
 
 
+
+
+#if 0
+        if (MODE_SHI)
+        {
+            // 00 -> tile pri0
+            // 01 -> tile pri1
+            // 10 -> sprite pri0
+            // 11 -> sprite pri1
+
+            if (!(*src & PIXATTR_SPRITE))
+            {
+                // Tile: pri0 -> shadow, pri1 -> normal
+                if (!(*src & PIXATTR_HIPRI))
+                    SHADOW_COLOR(r,g,b);
+            }
+            else
+            {
+                if (index == 0x0E || index == 0x1E || index == 0x2E)
+                    /* VDP bug: these indices do nothing */ ;
+                else
+                {
+                    // Sprite pri=0: half-intensity, pri1 -> highlight
+                    if (!(*src & PIXATTR_HIPRI)
+                        SHADOW_COLOR(r,g,b);
+                    else
+                        HIGHLIGHT_COLOR(r,g,b);
+                }
+            }
+        }
+#endif
