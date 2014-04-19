@@ -26,6 +26,10 @@ private:
 
     void get_hscroll(int line, int *hscroll_a, int *hscroll_b);
 
+private:
+    uint8_t* get_offscreen_buffer();
+    void mix_offscreen_buffer(uint8_t *screen, uint8_t *buffer, int x, int width);
+
 public:
     int screen_offset() { return (SCREEN_WIDTH - screen_width()) / 2; }
     int screen_width() { return BIT(VDP.regs[12], 7) ? 40*8 : 32*8; }
@@ -56,7 +60,7 @@ void FORCE_INLINE GFX::draw_pixel(uint8_t *screen, uint16_t rgb, int pri, int dr
             return;
         break;
     case DRAW_MAX_PRIORITY:
-        if (pri < screen[3])
+        if (pri < (int8_t)screen[3])
             return;
         break;
     }
@@ -131,8 +135,10 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
     int addr_w = VDP.get_nametable_W();
     int row = y >> 3;
     int paty = y & 7;
+    uint16_t ntwidth = BITS(VDP.regs[16], 0, 2);
+    ntwidth  = (ntwidth + 1) * 32;
 
-    draw_nametable(screen, VDP.VRAM + addr_w + row*2*screen_width()/8, screen_width()/8, paty);
+    draw_nametable(screen, VDP.VRAM + addr_w + row*2*ntwidth, screen_width()/8, paty);
 }
 
 void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx, uint16_t *vsram)
@@ -184,12 +190,7 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx,
 
 void GFX::draw_sprites(uint8_t *screen, int line)
 {
-    enum { OVERFLOW = 32 };
-    static uint8_t sprite_buffer[(SCREEN_WIDTH+OVERFLOW*2)*4];
-    int indices[64];
     uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & 0x7F) << 9);
-    uint8_t *buffer = sprite_buffer+OVERFLOW*4;
-    memset(sprite_buffer, 0xFF, sizeof(sprite_buffer));
 
     // This is both the size of the table as seen by the VDP
     // *and* the maximum number of sprites that are processed
@@ -269,7 +270,7 @@ void GFX::draw_sprites(uint8_t *screen, int line)
                     name += sh*(sw-1);
                 for (int p=0;p<sw && num_pixels < MAX_PIXELS_PER_LINE;p++)
                 {
-                    draw_pattern<DRAW_DONT_OVERWRITE>(buffer + (sx+p*8)*4, name, paty);
+                    draw_pattern<DRAW_DONT_OVERWRITE>(screen + (sx+p*8)*4, name, paty);
                     if (!fliph)
                         name += sh;
                     else
@@ -291,20 +292,6 @@ void GFX::draw_sprites(uint8_t *screen, int line)
 
         if (link == 0) break;
         sidx = link;
-    }
-
-    // Mix sprite buffer into the destination buffer
-    for (int i=0;i<screen_width();++i)
-    {
-        if (buffer[3] != 0xFF && buffer[3] >= screen[3])
-        {
-            screen[0] = buffer[0];
-            screen[1] = buffer[1];
-            screen[2] = buffer[2];
-            screen[3] = buffer[3];
-        }
-        buffer += 4;
-        screen += 4;
     }
 }
 
@@ -335,15 +322,38 @@ void GFX::get_hscroll(int line, int *hscroll_a, int *hscroll_b)
     *hscroll_b = FETCH16(table + idx*4 + 2) & 0x3FF;
 }
 
+uint8_t *GFX::get_offscreen_buffer(void)
+{
+    enum { OVERFLOW = 32 };
+    static uint8_t buffer[(SCREEN_WIDTH+OVERFLOW*2)*4];
+
+    memset(buffer, 0xFF, sizeof(buffer));
+
+    return buffer + OVERFLOW*4;
+}
+
+void GFX::mix_offscreen_buffer(uint8_t *screen, uint8_t *buffer, int x, int w)
+{
+    screen += x*4;
+    buffer += x*4;
+
+    while (w--)
+    {
+        if ((int8_t)buffer[3] >= (int8_t)screen[3])
+        {
+            screen[0] = buffer[0];
+            screen[1] = buffer[1];
+            screen[2] = buffer[2];
+            screen[3] = buffer[3];
+        }
+        buffer += 4;
+        screen += 4;
+    }
+}
+
+
 bool GFX::draw_scanline(uint8_t *screen, int line)
 {
-    int winh = VDP.regs[17] & 0x1F;
-    int winhright = VDP.regs[17] >> 7;
-
-    int winv = VDP.regs[18] & 0x1F;
-    int winvdown = VDP.regs[18] >> 7;
-    bool linew;
-
     if (BITS(VDP.regs[12], 1, 2) != 0)
         assert(!"interlace mode");
 
@@ -381,7 +391,7 @@ bool GFX::draw_scanline(uint8_t *screen, int line)
 
     uint16_t backdrop_color = VDP.CRAM[BITS(VDP.regs[7], 0, 6)];
     for (int x=0;x<screen_width();x++)
-        draw_pixel(screen + x*4, backdrop_color, 0, false);
+        draw_pixel(screen + x*4, backdrop_color, 0, DRAW_ALWAYS);
 
     // Plaen/sprite disable, show only backdrop
     if (!BIT(VDP.regs[1], 6))
@@ -390,39 +400,75 @@ bool GFX::draw_scanline(uint8_t *screen, int line)
     int hsa, hsb;
     get_hscroll(line, &hsa, &hsb);
 
+    int winh = VDP.regs[17] & 0x1F;
+    int winhright = VDP.regs[17] >> 7;
+    int winv = VDP.regs[18] & 0x1F;
+    int winvdown = VDP.regs[18] >> 7;
+    bool full_window, partial_window;
+
+    // Plane A or W
+    full_window = false;
+    if (winv) {
+        if (winvdown && line >= winv*8)
+        {
+            full_window = true;
+        }
+        else if (!winvdown && line < winv*8)
+        {
+            full_window = true;
+        }
+    }
+    if (winh*16 >= screen_width())
+        full_window = true;
+
+    if (!full_window)
+    {
+        if (!winhright)
+            partial_window = (winh != 0);
+        else
+            partial_window = true;
+    }
+
     // Plane B
     if (!keystate[SDLK_b])
         draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, VDP.VSRAM+1);
 
-    // Plane A or W
-    linew = false;
-    if (winv) {
-        if (winvdown && line >= winv*8)
-        {
-            linew = true;
-        }
-        else if (!winvdown && line <= winv*8)
-        {
-            linew = true;
-        }
+    if (!full_window && !keystate[SDLK_a])
+    {
+        uint8_t *buffer = get_offscreen_buffer();
+        draw_plane_ab(buffer, line, VDP.get_nametable_A(), hsa, VDP.VSRAM);
+
+        int ax = (!winhright ? winh*16 : 0);
+        int aw = screen_width() - winh*16;
+        mix_offscreen_buffer(screen, buffer, ax, aw);
     }
 
-    if (!linew && !keystate[SDLK_a])
-        draw_plane_ab(screen, line, VDP.get_nametable_A(), hsa, VDP.VSRAM);
+    if (full_window && !keystate[SDLK_w])
+        draw_plane_w(screen, line);
+    else if (partial_window && !keystate[SDLK_w])
+    {
+        uint8_t *buffer = get_offscreen_buffer();
+        draw_plane_w(buffer, line);
+
+        int wx = (!winhright ? 0 : screen_width() - winh*16);
+        int ww = winh*16;
+        mix_offscreen_buffer(screen, buffer, wx, ww);
+    }
 
     // Sprites
     if (!keystate[SDLK_s])
-        draw_sprites(screen, line);
-
-    if (linew && !keystate[SDLK_w])
-        draw_plane_w(screen, line);
+    {
+        uint8_t *buffer = get_offscreen_buffer();
+        draw_sprites(buffer, line);
+        mix_offscreen_buffer(screen, buffer, 0, screen_width());
+    }
 
     // Copy backdrop on area outside the current resolution,
     // so we overwrite any pattern overflow.
     for (int x=0;x<screen_offset();x++)
-        draw_pixel(screen + -x*4, backdrop_color, 0, false);
+        draw_pixel(screen + -x*4, backdrop_color, 0, DRAW_ALWAYS);
     for (int x=screen_width();x<SCREEN_WIDTH;x++)
-        draw_pixel(screen + x*4, backdrop_color, 0, false);
+        draw_pixel(screen + x*4, backdrop_color, 0, DRAW_ALWAYS);
 
     return true;
 }
