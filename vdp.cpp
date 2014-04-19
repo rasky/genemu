@@ -38,12 +38,10 @@ int VDP::hcounter(void)
     if (REG12_MODE_H40)
     {
         pixclk = mclk * 420 / VDP_CYCLES_PER_LINE;
-        mem_log("HCOUNTER", "mclk:%d pixclk:%d\n", mclk, pixclk);
         enum { SPLIT_POINT = 13+320+14+2 };
         pixclk += 0xD;
         if (pixclk >= SPLIT_POINT)
             pixclk = pixclk - SPLIT_POINT + 0x1C9;
-        mem_log("HCOUNTER", "final:%x\n", pixclk);
     }
     else
     {
@@ -164,7 +162,10 @@ uint16_t VDP::data_port_r16(void)
         return value;
 
     case 0x4:
-        value = VSRAM[(address_reg >> 1) & 0x3F];
+        if (((address_reg >> 1) & 0x3F) >= 0x28)
+            value = VSRAM[0];
+        else
+            value = VSRAM[(address_reg >> 1) & 0x3F];
         value = (value & VSRAM_BITMASK) | (fifo[3] & ~VSRAM_BITMASK);
         address_reg += REG15_DMA_INCREMENT;
         address_reg &= 0x7F;
@@ -348,7 +349,7 @@ void VDP::dma_trigger()
             break;
 
         case 3:
-            //assert(!"not implemented: VRAM copy");
+            dma_copy();
             break;
     }
 }
@@ -376,21 +377,19 @@ void VDP::dma_fill(uint16_t value)
             src_addr_low++;
         } while (--length);
         break;
-    case 0x3:
+    case 0x3:  // undocumented and buggy, see vdpfifotesting
         do {
-            CRAM[address_reg & 0x3F] = value;
+            CRAM[(address_reg >> 1) & 0x3F] = fifo[3];
             address_reg += REG15_DMA_INCREMENT;
             src_addr_low++;
         } while (--length);
-        //assert(!"not implemented: DMA fill CRAM");
         break;
-    case 0x5:
+    case 0x5:  // undocumented and buggy, see vdpfifotesting:
         do {
-            VSRAM[address_reg & 0x3F] = value;
+            VSRAM[(address_reg >> 1) & 0x3F] = fifo[3];
             address_reg += REG15_DMA_INCREMENT;
             src_addr_low++;
         } while (--length);
-        // assert(!"not implemented: DMA fill VSRAM");
         break;
     default:
         mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
@@ -445,6 +444,31 @@ void VDP::dma_m68k()
 
     // Clear DMA length at the end of transfer
     regs[19] = regs[20] = 0;
+}
+
+void VDP::dma_copy()
+{
+    int length = REG19_DMA_LENGTH;
+    uint16_t src_addr_low = REG21_DMA_SRCADDR_LOW;
+
+    assert(length != 0);
+    mem_log("VDP", "DMA copy: src:%04x dst:%04x len:%x\n", src_addr_low, address_reg&0xFFFF, length);
+
+    do {
+        uint16_t value = VRAM[src_addr_low ^ 1];
+        VRAM[(address_reg ^ 1) & 0xFFFF] = value;
+
+        address_reg += REG15_DMA_INCREMENT;
+        src_addr_low++;
+    } while (--length);
+
+    // Update DMA source address after end of transfer
+    regs[21] = src_addr_low & 0xFF;
+    regs[22] = src_addr_low >> 8;
+
+    // Clear DMA length at the end of transfer
+    regs[19] = regs[20] = 0;
+
 }
 
 int VDP::get_nametable_A() { return REG2_NAMETABLE_A; }

@@ -36,6 +36,7 @@ private:
     int hcounter();
     void dma_trigger();
     void dma_fill(uint16_t value);
+    void dma_copy();
     void dma_m68k();
     void push_fifo(uint16_t value);
 
