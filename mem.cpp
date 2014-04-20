@@ -166,13 +166,7 @@ static void io_mem_w8(unsigned int address, unsigned int value)
             fwrite(ZRAM, 1, sizeof(ZRAM), f);
             fclose(f);
         }
-        if (value & 1) {
-            // A Z80 reset happened on this write:
-            // reset also the YM2612 which is connected
-            // to the same reset trigger
-            YM2612ResetChip();
-            mem_log("YM2612", "Reset chip\n");
-        }
+        // DO NOT reset YM2612 here (confirmed batman&robin)
         return;
     }
 
