@@ -500,11 +500,36 @@ void GFX::render_scanline(uint8_t *screen, int line)
         uint8_t pix;
         uint8_t tpix = *src1++;
         uint8_t spix = *src2++;
+        bool shadow = false, highlight = false;
 
         if ((spix & 0x3F) && (tpix & PIXATTR_HIPRI) <= (spix & PIXATTR_HIPRI))
+        {
             pix = spix;
+            if (MODE_SHI)
+            {
+                uint8_t index = spix & 0x3F;
+                if (index == 0x0E || index == 0x1E || index == 0x2E)
+                    /* VDP bug: these indices do nothing */ ;
+                else if (index == 0x3E)
+                {
+                    pix = tpix;
+                    highlight = true;
+                }
+                else if (index == 0x3F)
+                {
+                    pix = tpix;
+                    shadow = true;
+                }
+                else
+                    shadow = !(pix & PIXATTR_HIPRI);
+            }
+        }
         else
+        {
             pix = tpix;
+            if (MODE_SHI)
+                shadow = !(pix & PIXATTR_HIPRI);
+        }
 
         uint8_t index = pix & 0x3F;
         uint16_t rgb = VDP.CRAM[index];
@@ -513,6 +538,15 @@ void GFX::render_scanline(uint8_t *screen, int line)
         uint8_t g = CRAM_G(rgb);
         uint8_t b = CRAM_B(rgb);
 
+#if 1
+        if (!keystate[SDL_SCANCODE_H])
+        {
+            if (highlight)
+                HIGHLIGHT_COLOR(r,g,b);
+            else if (shadow)
+                SHADOW_COLOR(r,g,b);
+        }
+#endif
         *screen++ = r;
         *screen++ = g;
         *screen++ = b;
@@ -525,36 +559,3 @@ void gfx_render_scanline(uint8_t *screen, int line)
 {
     GFX.render_scanline(screen, line);
 }
-
-
-
-
-#if 0
-        if (MODE_SHI)
-        {
-            // 00 -> tile pri0
-            // 01 -> tile pri1
-            // 10 -> sprite pri0
-            // 11 -> sprite pri1
-
-            if (!(*src & PIXATTR_SPRITE))
-            {
-                // Tile: pri0 -> shadow, pri1 -> normal
-                if (!(*src & PIXATTR_HIPRI))
-                    SHADOW_COLOR(r,g,b);
-            }
-            else
-            {
-                if (index == 0x0E || index == 0x1E || index == 0x2E)
-                    /* VDP bug: these indices do nothing */ ;
-                else
-                {
-                    // Sprite pri=0: half-intensity, pri1 -> highlight
-                    if (!(*src & PIXATTR_HIPRI)
-                        SHADOW_COLOR(r,g,b);
-                    else
-                        HIGHLIGHT_COLOR(r,g,b);
-                }
-            }
-        }
-#endif
