@@ -1,18 +1,18 @@
 #include "hw.h"
 #include <SDL.h>
-#include <SDL_framerate.h>
-#include <SDL_rotozoom.h>
 #include <assert.h>
 #include <time.h>
 
 #define HW_AUDIO_NUMBUFFERS 8
 
-static SDL_Surface *screen;
-static SDL_Surface *frame;
-static FPSmanager fps;
+static SDL_Window *screen;
+static SDL_Renderer *renderer;
+static SDL_Texture *frame;
+static uint8_t framebuf[320*224*4];
+
 static int16_t AUDIO_BUF[HW_AUDIO_NUMBUFFERS][HW_AUDIO_NUMSAMPLES*2];
 static int audio_buf_index_w=2, audio_buf_index_r=0;
-uint8_t *keystate;
+const uint8_t *keystate;
 static clock_t frameclock;
 static int framecounter;
 
@@ -30,17 +30,21 @@ void hw_init(void)
     }
     atexit(SDL_Quit);
 
-    screen=SDL_SetVideoMode(320*ZOOM, 224*ZOOM, 32, SDL_DOUBLEBUF);
-    if (screen == NULL)
-    {
-       printf("Unable to set video mode: %s\n", SDL_GetError());
-       exit(1);
-    }
+    SDL_CreateWindowAndRenderer(320*ZOOM, 224*ZOOM, SDL_WINDOW_RESIZABLE,
+        &screen, &renderer);
 
-    frame = SDL_CreateRGBSurface(SDL_SWSURFACE, 320, 224, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0x0);
-    SDL_initFramerate(&fps);
-    SDL_setFramerate(&fps, 100);
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");  // make the scaled rendering look smoother.
+    SDL_RenderSetLogicalSize(renderer, 320, 224);
 
+    frame = SDL_CreateTexture(renderer,
+                              SDL_PIXELFORMAT_ABGR8888,
+                              SDL_TEXTUREACCESS_STREAMING,
+                              320, 224);
+
+    keystate = SDL_GetKeyboardState(NULL);
+
+
+#if 1
     /* Initialize audio */
     SDL_AudioSpec wanted;
 
@@ -56,6 +60,7 @@ void hw_init(void)
     }
 
     SDL_PauseAudio(0);
+#endif
 }
 
 int hw_poll(void)
@@ -74,53 +79,34 @@ int hw_poll(void)
         }
     }
 
-    keystate = SDL_GetKeyState(NULL);
-
     return 1;
 }
 
 void hw_beginframe(uint8_t **screen, int *pitch)
 {
-    SDL_LockSurface(frame);
-    *screen = frame->pixels;
-    *pitch = frame->pitch;
+    *screen = framebuf;
+    *pitch = 320*4;
 }
 
 #define ARGB  1
 
 void hw_endframe(void)
 {
-    SDL_UnlockSurface(frame);
 
     if (!frameclock || SDL_GetTicks() < frameclock)
     {
-        SDL_LockSurface(frame);
-        uint8_t *src = frame->pixels;
-        int srcpitch = frame->pitch;
-        SDL_LockSurface(screen);
-        uint8_t *dst = screen->pixels;
-        int dstpitch = screen->pitch;
+        SDL_UpdateTexture(frame, NULL, framebuf, 320*4);
 
-        for (int y=0;y<frame->h;y++)
-        {
-            for (int zy=0;zy<ZOOM;zy++)
-            {
-                uint32_t *drow = (uint32_t*)(dst + dstpitch*(y*ZOOM+zy));
-                uint32_t *srow = (uint32_t*)(src + srcpitch*y);
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, frame, NULL, NULL);
+        SDL_RenderPresent(renderer);
 
-                for (int x=0;x<frame->w;x++)
-                {
-                    for (int z=0;z<ZOOM;z++)
-                        *drow++ = *srow << 8;
-                    srow++;
-                }
-            }
-        }
-
-        SDL_UnlockSurface(screen);
-        SDL_UnlockSurface(frame);
-        SDL_Flip(screen);
-        //SDL_framerateDelay(&fps);
+        if (frameclock > SDL_GetTicks())
+            SDL_Delay(frameclock - SDL_GetTicks());
+    }
+    else
+    {
+        printf("HW: frameskipping %d (frameclock: %ld, ticks: %d)\n", framecounter, frameclock, SDL_GetTicks());
     }
 
     if (framecounter == 0)

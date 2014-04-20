@@ -1,11 +1,11 @@
 #include "hw.h"
-#include <SDL.h>
 extern "C" {
     #include "ym2612/ym2612.h"
 }
 #include "vdp.h"
 #include "cpu.h"
 #include "mem.h"
+#include <stdio.h>
 #include <string.h>
 #include <assert.h>
 

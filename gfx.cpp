@@ -207,7 +207,7 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx,
 void GFX::draw_sprites(uint8_t *screen, int line)
 {
     // Plane/sprite disable, show only backdrop
-    if (!BIT(VDP.regs[1], 6) || keystate[SDLK_s])
+    if (!BIT(VDP.regs[1], 6) || keystate[SDL_SCANCODE_S])
         return;
 
     uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & 0x7F) << 9);
@@ -344,10 +344,10 @@ void GFX::get_hscroll(int line, int *hscroll_a, int *hscroll_b)
 
 uint8_t *GFX::get_offscreen_buffer(void)
 {
-    enum { OVERFLOW = 32 };
-    static uint8_t buffer[SCREEN_WIDTH + OVERFLOW*2];
+    enum { PIX_OVERFLOW = 32 };
+    static uint8_t buffer[SCREEN_WIDTH + PIX_OVERFLOW*2];
     memset(buffer, 0, sizeof(buffer));
-    return buffer + OVERFLOW;
+    return buffer + PIX_OVERFLOW;
 }
 
 void GFX::mix_offscreen_buffer(uint8_t *screen, uint8_t *buffer, int x, int w)
@@ -433,10 +433,10 @@ void GFX::draw_tiles(uint8_t *screen, int line)
     }
 
     // Plane B
-    if (!keystate[SDLK_b])
+    if (!keystate[SDL_SCANCODE_B])
         draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, VDP.VSRAM+1);
 
-    if (!full_window && !keystate[SDLK_a])
+    if (!full_window && !keystate[SDL_SCANCODE_A])
     {
         uint8_t *buffer = get_offscreen_buffer();
         draw_plane_ab(buffer, line, VDP.get_nametable_A(), hsa, VDP.VSRAM);
@@ -446,9 +446,9 @@ void GFX::draw_tiles(uint8_t *screen, int line)
         mix_offscreen_buffer(screen, buffer, ax, aw);
     }
 
-    if (full_window && !keystate[SDLK_w])
+    if (full_window && !keystate[SDL_SCANCODE_W])
         draw_plane_w(screen, line);
-    else if (partial_window && !keystate[SDLK_w])
+    else if (partial_window && !keystate[SDL_SCANCODE_W])
     {
         uint8_t *buffer = get_offscreen_buffer();
         draw_plane_w(buffer, line);
@@ -464,9 +464,9 @@ void GFX::render_scanline(uint8_t *screen, int line)
     // Overflow is the maximum size we can draw outside to avoid
     // wasting time and code in clipping. The maximum object is a 4x4 sprite,
     // so 32 pixels (on both side) is enough.
-    enum { OVERFLOW = 32 };
-    uint8_t tile_buffer[SCREEN_WIDTH + OVERFLOW*2];
-    uint8_t sprite_buffer[SCREEN_WIDTH + OVERFLOW*2];
+    enum { PIX_OVERFLOW = 32 };
+    uint8_t tile_buffer[SCREEN_WIDTH + PIX_OVERFLOW*2];
+    uint8_t sprite_buffer[SCREEN_WIDTH + PIX_OVERFLOW*2];
 
     if (BITS(VDP.regs[12], 1, 2) != 0)
         assert(!"interlace mode");
@@ -479,8 +479,8 @@ void GFX::render_scanline(uint8_t *screen, int line)
     if (BIT(VDP.regs[0], 0))
         return;
 
-    uint8_t *src1 = tile_buffer+OVERFLOW;
-    uint8_t *src2 = sprite_buffer+OVERFLOW;
+    uint8_t *src1 = tile_buffer+PIX_OVERFLOW;
+    uint8_t *src2 = sprite_buffer+PIX_OVERFLOW;
     uint16_t backdrop_color = VDP.CRAM[BITS(VDP.regs[7], 0, 6)];
 
     memset(src1, 0, SCREEN_WIDTH);

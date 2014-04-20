@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-extern uint8_t *keystate;
+extern const uint8_t *keystate;
 
 void hw_init(void);
 int hw_poll(void);
