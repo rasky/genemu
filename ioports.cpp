@@ -78,7 +78,7 @@ protected:
         if (_km > 0)
             return 0xFF;
 
-        uint8_t ret;
+        uint8_t ret=0;
         int *km = keymaps[_km];
 
         if (_TH)
