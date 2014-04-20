@@ -389,9 +389,6 @@ void GFX::draw_tiles(uint8_t *screen, int line)
     }
 #endif
 
-    // Center display if horizontal resolution is smaller
-    screen += screen_offset();
-
     uint16_t backdrop_color = BITS(VDP.regs[7], 0, 6);
     for (int x=0;x<screen_width();x++)
         draw_pixel(screen + x, backdrop_color, 0, DRAW_ALWAYS);
