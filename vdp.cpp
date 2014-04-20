@@ -277,7 +277,7 @@ uint16_t VDP::hvcounter_r16(void)
     int hc = hcounter() >> 1;
     int vc = vcounter;
 
-    if (vc >= 0xEA) vc -= 0xEA - 0xE5;
+    if (vc >= 0xEB) vc -= 0xEB - 0xE5;
     assert(vc < 256);
     assert(hc < 256);
 
