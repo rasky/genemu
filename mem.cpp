@@ -16,6 +16,8 @@ uint8_t RAM[0x10000];
 uint8_t ZRAM[0x2000];
 int Z80_BANK;
 extern int activecpu;
+int VERSION_OVERSEA;
+int VERSION_NTSC;
 
 inline uint16_t SWAP16(uint16_t a) {
     return (a >> 8) | (a << 8);
@@ -102,7 +104,16 @@ static unsigned int io_mem_r8(unsigned int address)
 
     // Version register
     if ((address & ~1) == 0x0)
-        return 0xA0;
+    {
+        uint8_t ver = 1;
+
+        if (VERSION_NTSC)
+            ver |= 0x40;
+        if (VERSION_OVERSEA)
+            ver |= 0x80;
+
+        return ver;
+    }
 
     if (address < 0x20)
         return ioports_read(address);
@@ -431,6 +442,7 @@ int load_smd(const char *fn)
     return nblocks*16*1024;
 }
 
+#include "cartidge.cpp"
 
 static memfunc_pair MVDP = { vdp_mem_r8, vdp_mem_r16, vdp_mem_w8, vdp_mem_w16 };
 static memfunc_pair IO = { io_mem_r8, io_mem_r16, io_mem_w8, io_mem_w16 };
@@ -479,9 +491,14 @@ void mem_init(int romsize)
     for (int i=0x8;i<0x10;++i)
         z80_memtable[i] = MEMFUN_PAIR(&ZBANK);
 
+    VERSION_OVERSEA = 0;
+    VERSION_NTSC = 1;
+
     YM2612Init();
     YM2612Config(9);
     YM2612ResetChip();
+
+    cartidge_init();
 }
 
 void mem_log(const char *subs, const char *fmt, ...)
