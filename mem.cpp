@@ -461,9 +461,22 @@ void mem_z80area(bool active)
 
 void mem_init(int romsize)
 {
+    int pow2 = 1;
+
     romsize /= 65536;
-    for (int i=0;i<romsize;++i)
-        m68k_memtable[i] = ROM + i*65536;
+    while (pow2 < romsize)
+        pow2 <<= 1;
+
+    // Mirror ROM in the range 0x00-0x3F
+    // (but respect power-of-two since hardware won't mirror
+    // in non-pow2 multiples).
+    for (int j=0;j<0x40;j+=pow2)
+    {
+        mem_log("ROM", "Mirror from %02x0000\n", j);
+        for (int i=0;i<romsize;++i)
+            m68k_memtable[i+j] = ROM + i*65536;
+    }
+
     m68k_memtable[0xA1] = MEMFUN_PAIR(&IO);
     for (int i=0xA2;i<0xC0;i++)
         m68k_memtable[i] = MEMFUN_PAIR(&EXP);
