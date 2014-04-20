@@ -188,6 +188,7 @@ uint16_t VDP::data_port_r16(void)
     default:
         fprintf(stdout, "[VDP][PC=%06x](%04d) invalid data port write16: code:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg);
         assert(!"data port r not handled");
+        return 0xFF;
     }
 
 
