@@ -31,6 +31,9 @@ int main(int argc, char *argv[])
         romsize = load_bin(argv[1]);
     mem_init(romsize);
 
+    for (int i=2;i<argc;++i)
+        mem_apply_gamegenie(argv[i]);
+
 #if 0
     uint16_t checksum = 0;
     for (int i=0;i<(romsize-512)/2;i++)

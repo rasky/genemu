@@ -521,3 +521,35 @@ void mem_log(const char *subs, const char *fmt, ...)
     vfprintf(stdout, fmt, va);
     va_end(va);
 }
+
+bool mem_apply_gamegenie(char *gg)
+{
+    static const char tbl[] = { "ABCDEFGHJKLMNPRSTVWXYZ0123456789" };
+    uint64_t num = 0;
+
+    if (strlen(gg) != 9 || gg[4] != '-')
+        return false;
+
+    for (int i=0; i<9; i++)
+    {
+        char *pos;
+        if (i==4) continue;
+        if (!(pos = strchr(tbl, gg[i])))
+            assert(0);
+        num = (num << 5) | (pos-tbl);
+    }
+
+    uint8_t addr0 = BITS(num, 16, 8);
+    uint8_t addr1 = BITS(num, 24, 8);
+    uint8_t addr2 = BITS(num,  0, 8);
+    uint8_t val0  = BITS(num,  8, 8);
+    uint8_t val1  = BITS(num, 32, 8);
+    val0 = (val0 >> 3) | (val0 << 5);
+
+    uint32_t address = (addr0 << 16) | (addr1 << 8) | addr2;
+    uint16_t value = (val0 << 8) | val1;
+
+    fprintf(stderr, "GG code: %s (%06x:%04x)\n", gg, address, value);
+    m68k_write_memory_16(address, value);
+    return true;
+}

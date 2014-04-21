@@ -7,3 +7,4 @@ void mem_init(int romsize);
 void mem_log(const char *subs, const char *fmt, ...);
 int load_bin(const char *fn);
 int load_smd(const char *fn);
+bool mem_apply_gamegenie(char *gg);
