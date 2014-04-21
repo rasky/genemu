@@ -138,12 +138,12 @@ void cartidge_init(void)
     if (memchr(region, 'E', sizeof(region)))
     {
         VERSION_OVERSEA = 1;
-        VERSION_NTSC = 1;
+        VERSION_PAL = 1;
     }
     else if (memchr(region, '1', sizeof(region)))
     {
         VERSION_OVERSEA = 0;
-        VERSION_NTSC = 0;
+        VERSION_PAL = 0;
     }
 
     // Map cartidge-specific hardware

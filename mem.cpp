@@ -17,7 +17,7 @@ uint8_t ZRAM[0x2000];
 int Z80_BANK;
 extern int activecpu;
 int VERSION_OVERSEA;
-int VERSION_NTSC;
+int VERSION_PAL;
 
 inline uint16_t SWAP16(uint16_t a) {
     return (a >> 8) | (a << 8);
@@ -107,7 +107,7 @@ static unsigned int io_mem_r8(unsigned int address)
     {
         uint8_t ver = 1;
 
-        if (VERSION_NTSC)
+        if (VERSION_PAL)
             ver |= 0x40;
         if (VERSION_OVERSEA)
             ver |= 0x80;
@@ -498,8 +498,8 @@ void mem_init(int romsize)
     for (int i=0x8;i<0x10;++i)
         z80_memtable[i] = MEMFUN_PAIR(&ZBANK);
 
-    VERSION_OVERSEA = 0;
-    VERSION_NTSC = 1;
+    VERSION_OVERSEA = 1;
+    VERSION_PAL = 0;
 
     YM2612Init();
     YM2612Config(9);
