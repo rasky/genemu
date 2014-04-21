@@ -1,2 +1,5 @@
 build
 roms
+debugroms
+*.project
+*.sublime-workspace
