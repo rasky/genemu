@@ -316,7 +316,7 @@ void VDP::scanline(uint8_t* screen)
         line_counter_interrupt = REG10_LINE_COUNTER;
     }
 
-    if (vcounter == 224)   // vblank begin
+    if (vcounter == 225)   // vblank begin
     {
         if (REG1_VBLANK_INTERRUPT)
             CPU_M68K.irq(6);
