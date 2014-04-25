@@ -11,6 +11,7 @@ What's emulated
 ===============
  * All the basics: CPUs, sprites, planes, DMA, etc.
  * Accurate Z80 RESET/BUSREQ process
+ * Correct hinterrupt / hv counter
  * Correct sprite priority vs bkg
  * Correct sprite overflow and masking
  * Wide resolution change (32 vs 40 cells)
@@ -18,14 +19,13 @@ What's emulated
  * Basic HINTERRUPT emulation
  * Vertical cell scrolling through VSRAM
  * Window horizontal clipping
+ * PAL vs NTSC game detection
 
 Todo list
 =========
 The following is a rough list of missing features or things to be fixed:
 
  * Shadow / highlight mode
- * Correct hinterrupt / hv counter
  * SN7689 audio chip
- * PAL vs NTSC game detection
  * Accurate timing for DMA
  * The infamous "window bug"
