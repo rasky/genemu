@@ -76,9 +76,6 @@ int main(int argc, char *argv[])
 
         for (int sl=0;sl<VDP_SCANLINES;++sl)
         {
-            if (sl == 0xE0)
-                CPU_Z80.irq();
-
             CPU_M68K.run(MASTER_CLOCK + VDP_CYCLES_PER_LINE);
             CPU_Z80 .run(MASTER_CLOCK + VDP_CYCLES_PER_LINE);
 

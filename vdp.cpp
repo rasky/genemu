@@ -309,7 +309,7 @@ void VDP::scanline(uint8_t* screen)
         if (REG0_LINE_INTERRUPT && vcounter <= 224)
         {
             mem_log("VDP", "HINTERRUPT (vcounter: %d, new counter: %d)\n", vcounter, REG10_LINE_COUNTER);
-            m68k_set_irq(M68K_IRQ_4);
+            CPU_M68K.irq(4);
             hirq = true;
         }
 
@@ -319,7 +319,8 @@ void VDP::scanline(uint8_t* screen)
     if (vcounter == 224)   // vblank begin
     {
         if (REG1_VBLANK_INTERRUPT)
-            m68k_set_irq(M68K_IRQ_6);
+            CPU_M68K.irq(6);
+        CPU_Z80.irq();
     }
 
     gfx_render_scanline(screen, vcounter);
