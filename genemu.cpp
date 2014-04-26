@@ -82,8 +82,9 @@ int main(int argc, char *argv[])
             vdp_scanline(screen);
             screen += pitch;
 
-            YM2612Update(audio + (audio_index>>16)*2, HW_AUDIO_NUMSAMPLES/VDP_SCANLINES);
+            int prev_index = audio_index;
             audio_index += audio_step;
+            YM2612Update(audio + ((prev_index+0x8000)>>16)*2, (audio_index-prev_index+0x8000)>>16);
 
             MASTER_CLOCK += VDP_CYCLES_PER_LINE;
         }

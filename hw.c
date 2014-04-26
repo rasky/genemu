@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <time.h>
 
-#define HW_AUDIO_NUMBUFFERS 8
+#define HW_AUDIO_NUMBUFFERS 3
 
 static SDL_Window *screen;
 static SDL_Renderer *renderer;
@@ -11,12 +11,12 @@ static SDL_Texture *frame;
 static uint8_t framebuf[320*224*4];
 
 static int16_t AUDIO_BUF[HW_AUDIO_NUMBUFFERS][HW_AUDIO_NUMSAMPLES*2];
-static int audio_buf_index_w=2, audio_buf_index_r=0;
+static int audio_buf_index_w=1, audio_buf_index_r=0;
 const uint8_t *keystate;
 static clock_t frameclock;
 static int framecounter;
+static int audiocounter;
 
-#define SPLIT 20
 #define ZOOM 3
 
 static void fill_audio(void *userdata, uint8_t* stream, int len);
@@ -92,8 +92,7 @@ void hw_beginframe(uint8_t **screen, int *pitch)
 
 void hw_endframe(void)
 {
-
-    if (!frameclock || SDL_GetTicks() < frameclock)
+    if (audiocounter < framecounter)
     {
         SDL_UpdateTexture(frame, NULL, framebuf, 320*4);
 
@@ -101,24 +100,19 @@ void hw_endframe(void)
         SDL_RenderCopy(renderer, frame, NULL, NULL);
         SDL_RenderPresent(renderer);
 
-        if (frameclock > SDL_GetTicks())
-            SDL_Delay(frameclock - SDL_GetTicks());
+        while (audiocounter < framecounter)
+            SDL_Delay(1);
     }
     else
-    {
-        printf("HW: frameskipping %d (frameclock: %ld, ticks: %d)\n", framecounter, frameclock, SDL_GetTicks());
-    }
+        printf("HW: frameskipping %d\n", framecounter);
 
-    if (framecounter == 0)
-        frameclock = SDL_GetTicks();
-    frameclock += 1000/60+1;
     framecounter += 1;
 }
 
 void hw_beginaudio(int16_t **buf)
 {
     extern int framecounter;
-#if 0
+#if 1
     if (audio_buf_index_w >= audio_buf_index_r + HW_AUDIO_NUMBUFFERS)
         printf("[AUDIO](FC=%04d/R=%04d/W%04d) Warning: overflow audio buffer (producing too fast)\n", framecounter, audio_buf_index_r, audio_buf_index_w);
 #endif
@@ -132,12 +126,9 @@ void hw_endaudio(void)
 
 void fill_audio(void *userdata, uint8_t *stream, int len)
 {
-    static int audiocounter = 0;
-
     if (audio_buf_index_r == audio_buf_index_w)
     {
-        #if 0
-        extern int framecounter;
+        #if 1
         printf("[AUDIO](FC=%04d/AC=%04d/W=%04d) Warning: no audio generated, silencing...\n", framecounter, audiocounter, audio_buf_index_w);
         #endif
         memset(stream, 0, len);
