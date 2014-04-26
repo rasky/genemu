@@ -32,7 +32,6 @@ public:
     void init();
     void run(uint64_t target_cycles);
     void sync();
-    void irq();
     uint64_t clock();
     unsigned int PC() { return _cpu.PC.W; }
 
@@ -41,6 +40,8 @@ public:
 
     void set_busreq_line(bool assert);
     bool get_busreq_line() { return _busreq_line; };
+
+    void set_irq_line(bool assert);
 };
 
 extern CpuM68K CPU_M68K;

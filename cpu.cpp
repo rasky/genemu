@@ -74,10 +74,14 @@ void CpuZ80::sync(void)
     run(CPU_M68K.clock());
 }
 
-void CpuZ80::irq(void)
+void CpuZ80::set_irq_line(bool line)
 {
-    if (_reset_once)
-        IntZ80(&_cpu, INT_IRQ);
+    if (!_reset_once) return;
+
+    if (line)
+        _cpu.IRequest = INT_IRQ;
+    else
+        _cpu.IRequest = INT_NONE;
 }
 
 void CpuZ80::set_busreq_line(bool line)

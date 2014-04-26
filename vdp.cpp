@@ -4,6 +4,7 @@
 #include "vdp.h"
 #include "gfx.h"
 #include "mem.h"
+#include "cpu.h"
 extern "C" {
     #include "m68k/m68k.h"
 }
@@ -320,7 +321,12 @@ void VDP::scanline(uint8_t* screen)
     {
         if (REG1_VBLANK_INTERRUPT)
             CPU_M68K.irq(6);
-        CPU_Z80.irq();
+        CPU_Z80.set_irq_line(true);
+    }
+    if (vcounter == 226)
+    {
+        // The Z80 IRQ line stays asserted for one line
+        CPU_Z80.set_irq_line(false);
     }
 
     gfx_render_scanline(screen, vcounter);
