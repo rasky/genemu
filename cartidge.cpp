@@ -145,6 +145,11 @@ void cartidge_init(void)
         VERSION_OVERSEA = 0;
         VERSION_PAL = 0;
     }
+    else if (memchr(region, 'J', sizeof(region)))
+    {
+        VERSION_OVERSEA = 0;
+        VERSION_PAL = 0;
+    }
 
     // Map cartidge-specific hardware
     if (memcmp(code, "GM MK-12056", 10) == 0)
