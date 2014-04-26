@@ -158,9 +158,10 @@ void cartidge_init(void)
         m68k_memtable[0xA1] = MEMFUN_PAIR(&SSF2_BANKSWITCH);
         return;
     }
-    if (memcmp(code, "GM MK-1079 ", 10) == 0)   // Sonic3
+    if (memcmp(code, "GM MK-1079 ", 10) == 0 ||   // Sonic3
+        memcmp(code, "GM MK-1304 ", 10) == 0)     // Warriors of the sun
     {
-        // Sonic the Hedgehog 3
+        mem_log("CARTIDGE", "Backup RAM\n");
         backup_ram_init();
     }
 }
