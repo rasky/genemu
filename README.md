@@ -26,6 +26,8 @@ Todo list
 The following is a rough list of missing features or things to be fixed:
 
  * Shadow / highlight mode
+ * Interlace mode
+ * PAL resolution (40 cells)
  * SN7689 audio chip
  * Accurate timing for DMA
  * The infamous "window bug"
