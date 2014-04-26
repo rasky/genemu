@@ -12,6 +12,7 @@ public:
     void init();
     void reset();
     void run(uint64_t target_cycles);
+    void irq(int level);
     uint64_t clock();
     unsigned int PC() { return m68k_get_reg(0, M68K_REG_PC); }
 };

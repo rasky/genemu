@@ -32,6 +32,11 @@ void CpuM68K::reset(void)
     m68k_pulse_reset();
 }
 
+void CpuM68K::irq(int level)
+{
+    m68k_set_irq(level);
+}
+
 
 void CpuZ80::init(void)
 {
