@@ -369,11 +369,16 @@ void GFX::draw_tiles(uint8_t *screen, int line)
 
 #if 0
     if (line == 0) {
+        int winh = VDP.regs[17] & 0x1F;
+        int winhright = VDP.regs[17] >> 7;
+        int winv = VDP.regs[18] & 0x1F;
+        int winvdown = VDP.regs[18] >> 7;
         int addr_a = VDP.get_nametable_A();
         int addr_b = VDP.get_nametable_B();
         int addr_w = VDP.get_nametable_W();
         mem_log("GFX", "A(addr:%04x) B(addr:%04x) W(addr:%04x) SPR(addr:%04x)\n", addr_a, addr_b, addr_w, ((VDP.regs[5] & 0x7F) << 9));
         mem_log("GFX", "W(h:%d, right:%d, v:%d, down:%d\n)", winh, winhright, winv, winvdown);
+        mem_log("GFX", "SCROLL: %04x %04x\n", VDP.VSRAM[0], VDP.VSRAM[1]);
 
         FILE *f;
         f=fopen("vram.dmp", "wb");
@@ -407,26 +412,12 @@ void GFX::draw_tiles(uint8_t *screen, int line)
 
     // Plane A or W
     full_window = false;
-    if (winv) {
-        if (winvdown && line >= winv*8)
-        {
-            full_window = true;
-        }
-        else if (!winvdown && line < winv*8)
-        {
-            full_window = true;
-        }
-    }
-    if (winh*16 >= screen_width())
+    if (winvdown && line >= winv*8)
         full_window = true;
-
-    if (!full_window)
-    {
-        if (!winhright)
-            partial_window = (winh != 0);
-        else
-            partial_window = true;
-    }
+    else if (!winvdown && line < winv*8)
+        full_window = true;
+    if (!full_window && winh*16 >= screen_width())
+        full_window = true;
 
     // Plane B
     if (!keystate[SDL_SCANCODE_B])
@@ -444,7 +435,7 @@ void GFX::draw_tiles(uint8_t *screen, int line)
 
     if (full_window && !keystate[SDL_SCANCODE_W])
         draw_plane_w(screen, line);
-    else if (partial_window && !keystate[SDL_SCANCODE_W])
+    else if (!keystate[SDL_SCANCODE_W])
     {
         uint8_t *buffer = get_offscreen_buffer();
         draw_plane_w(buffer, line);
