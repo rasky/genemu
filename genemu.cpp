@@ -69,6 +69,9 @@ int main(int argc, char *argv[])
 
     while (hw_poll())
     {
+        VDP.frame_begin();
+        int numscanlines = VDP.num_scanlines();
+
         uint8_t *screen;
         int pitch;
         hw_beginframe(&screen, &pitch);
@@ -76,9 +79,9 @@ int main(int argc, char *argv[])
         int16_t *audio;
         hw_beginaudio(&audio);
         int audio_index = 0;
-        int audio_step = (HW_AUDIO_NUMSAMPLES << 16) / VDP_SCANLINES;
+        int audio_step = (HW_AUDIO_NUMSAMPLES << 16) / numscanlines;
 
-        for (int sl=0;sl<VDP_SCANLINES;++sl)
+        for (int sl=0;sl<numscanlines;++sl)
         {
             VDP.scanline_begin(screen);
             printf("PRE: %lld\n", CPU_M68K.clock());
@@ -104,6 +107,8 @@ int main(int argc, char *argv[])
             audio_index += audio_step;
             YM2612Update(audio + ((prev_index+0x8000)>>16)*2, (audio_index-prev_index+0x8000)>>16);
         }
+
+        VDP.frame_end();
 
         hw_endaudio();
         hw_endframe();

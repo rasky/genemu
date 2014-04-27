@@ -8,7 +8,7 @@
 static SDL_Window *screen;
 static SDL_Renderer *renderer;
 static SDL_Texture *frame;
-static uint8_t framebuf[320*224*4];
+static uint8_t framebuf[320*240*4];
 
 static int16_t AUDIO_BUF[HW_AUDIO_NUMBUFFERS][HW_AUDIO_NUMSAMPLES*2];
 static int audio_buf_index_w=1, audio_buf_index_r=0;
@@ -36,19 +36,19 @@ void hw_init(void)
 #if 1
     screen = SDL_CreateWindow("Genemu - Sega Genesis Emulator",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        320*ZOOM, 224*ZOOM, SDL_WINDOW_RESIZABLE);
+        320*ZOOM, 244*ZOOM, SDL_WINDOW_RESIZABLE);
     renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_PRESENTVSYNC);
 #else
-    SDL_CreateWindowAndRenderer(320*ZOOM, 224*ZOOM, SDL_WINDOW_RESIZABLE,
+    SDL_CreateWindowAndRenderer(320*ZOOM, 240*ZOOM, SDL_WINDOW_RESIZABLE,
         &screen, &renderer);
 #endif
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");  // make the scaled rendering look smoother.
-    SDL_RenderSetLogicalSize(renderer, 320, 224);
+    SDL_RenderSetLogicalSize(renderer, 320, 240);
 
     frame = SDL_CreateTexture(renderer,
                               SDL_PIXELFORMAT_ABGR8888,
                               SDL_TEXTUREACCESS_STREAMING,
-                              320, 224);
+                              320, 240);
 
     keystate = SDL_GetKeyboardState(NULL);
 
