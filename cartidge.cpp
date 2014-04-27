@@ -135,6 +135,10 @@ void cartidge_init(void)
     memcpy(region, &ROM[0x1F0], 0x10);
     fprintf(stderr, "Region: %s\n", region);
 
+    if (ROM[0x1B0] == 'R' && ROM[0x1B1] == 'A')
+        fprintf(stderr, "RAM definition: start:%06x end:%06x\n",
+            m68k_read_memory_32(0x1b4), m68k_read_memory_32(0x1b8));
+
     if (memchr(region, 'E', sizeof(region)))
     {
         VERSION_OVERSEA = 1;
