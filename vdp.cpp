@@ -278,9 +278,6 @@ uint16_t VDP::status_register_r(void)
             status |= STATUS_HBLANK;
     }
 
-    if (vcounter == 224 && status & STATUS_HBLANK)
-        status |= STATUS_VIRQPENDING;
-
     if (sprite_overflow)
         status |= STATUS_SPRITEOVERFLOW;
 
@@ -380,15 +377,20 @@ void VDP::scanline_hblank(uint8_t *screen)
         _vcounter = 0;
         sprite_overflow = 0;
     }
+
+    if (_vcounter == (mode_pal ? 0xF0 : 0xE0))
+        status_reg |= STATUS_VIRQPENDING;
 }
 
 void VDP::scanline_end(uint8_t* screen)
 {
-    if (_vcounter == (mode_pal ? 0xF0 : 0xE0))   // vblank begin
+    if (status_reg & STATUS_VIRQPENDING)   // vblank begin
     {
         if (REG1_VBLANK_INTERRUPT)
             CPU_M68K.irq(6);
         CPU_Z80.set_irq_line(true);
+
+        status_reg &= ~STATUS_VIRQPENDING;
     }
     if (_vcounter == (mode_pal ? 0xF1 : 0xE1))
     {
