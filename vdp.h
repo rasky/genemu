@@ -31,7 +31,7 @@ private:
     uint16_t hvcounter_latch;
     int sprite_overflow;
     int mode_h40;
-    int mode_pal;
+    int mode_v40;
 
 private:
     void register_w(int reg, uint8_t value);

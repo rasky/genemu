@@ -8,6 +8,8 @@
 extern "C" {
     #include "m68k/m68k.h"
 }
+
+extern int VERSION_PAL;
 extern int framecounter;
 
 #define REG0_HVLATCH          BIT(regs[0], 1)
@@ -61,10 +63,10 @@ int VDP::vcounter(void)
 {
     int vc = _vcounter;
 
-    if (mode_pal && vc >= 0x10B)
-        vc += 0x1D2 - 0x10B;
-    else if (!mode_pal && vc >= 0xEB)
-        vc -= 0x1E5 - 0xEB;
+    if (VERSION_PAL && vc >= 0x10B)
+        vc += 0x1D2 - 0x10B - 1;
+    else if (!VERSION_PAL && vc >= 0xEB)
+        vc += 0x1E5 - 0xEB - 1;
     assert(vc < 0x200);
     return vc;
 }
@@ -261,8 +263,8 @@ uint16_t VDP::status_register_r(void)
     status |= STATUS_FIFO_EMPTY;
 
     // VBLANK bit
-    if ((!mode_pal && vc >= 0xE0 && vc < 0x1FF) ||
-        ( mode_pal && vc >= 0xF0 && vc < 0x1FF) ||
+    if ((!VERSION_PAL && vc >= 0xE0 && vc < 0x1FF) ||
+        ( VERSION_PAL && vc >= 0xF0 && vc < 0x1FF) ||
         !REG1_DISP_ENABLED)
         status |= STATUS_VBLANK;
 
@@ -280,8 +282,7 @@ uint16_t VDP::status_register_r(void)
 
     if (sprite_overflow)
         status |= STATUS_SPRITEOVERFLOW;
-
-    if (mode_pal)
+    if (VERSION_PAL)
         status |= STATUS_PAL;
 
     // reading the status clears the pending flag for command words
@@ -297,15 +298,15 @@ uint16_t VDP::hvcounter_r16(void)
 
     int hc = hcounter();
     int vc = vcounter();
-    assert(vc < 256);
+    assert(vc < 512);
     assert(hc < 512);
 
-    return (vc << 8) | (hc >> 1);
+    return ((vc & 0xFF) << 8) | (hc >> 1);
 }
 
 void VDP::frame_begin(void)
 {
-    mode_pal = REG1_PAL;
+    mode_v40 = REG1_PAL;
 }
 
 void VDP::frame_end(void) {}
@@ -357,7 +358,7 @@ void VDP::scanline_hblank(uint8_t *screen)
         }
     }
 
-    if (_vcounter < (mode_pal ? 0xF0 : 0xE0))
+    if (_vcounter < (VERSION_PAL ? 0xF0 : 0xE0))
     {
         if (--line_counter_interrupt < 0)
         {
@@ -372,13 +373,13 @@ void VDP::scanline_hblank(uint8_t *screen)
     }
 
     _vcounter++;
-    if (_vcounter == (mode_pal ? 313 : 262))
+    if (_vcounter == (VERSION_PAL ? 313 : 262))
     {
         _vcounter = 0;
         sprite_overflow = 0;
     }
 
-    if (_vcounter == (mode_pal ? 0xF0 : 0xE0))
+    if (_vcounter == (VERSION_PAL ? 0xF0 : 0xE0))
         status_reg |= STATUS_VIRQPENDING;
 }
 
@@ -392,7 +393,7 @@ void VDP::scanline_end(uint8_t* screen)
 
         status_reg &= ~STATUS_VIRQPENDING;
     }
-    if (_vcounter == (mode_pal ? 0xF1 : 0xE1))
+    if (_vcounter == (VERSION_PAL ? 0xF1 : 0xE1))
     {
         // The Z80 IRQ line stays asserted for one line
         CPU_Z80.set_irq_line(false);
@@ -409,7 +410,7 @@ unsigned int VDP::scanline_hblank_clocks(void)
 
 unsigned int VDP::num_scanlines(void)
 {
-    return mode_pal ? 313 : 262;
+    return VERSION_PAL ? 313 : 262;
 }
 
 
