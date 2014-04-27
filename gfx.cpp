@@ -151,8 +151,7 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
     int addr_w = VDP.get_nametable_W();
     int row = y >> 3;
     int paty = y & 7;
-    uint16_t ntwidth = BITS(VDP.regs[16], 0, 2);
-    ntwidth  = (ntwidth + 1) * 32;
+    uint16_t ntwidth = (screen_width() == 320 ? 64 : 32);
 
     draw_nametable(screen, VDP.VRAM + addr_w + row*2*ntwidth, screen_width()/8, paty);
 }
@@ -439,7 +438,7 @@ void GFX::draw_tiles(uint8_t *screen, int line)
         draw_plane_ab(buffer, line, VDP.get_nametable_A(), hsa, VDP.VSRAM);
 
         int ax = (!winhright ? winh*16 : 0);
-        int aw = screen_width() - winh*16;
+        int aw = (!winhright ? screen_width() - winh*16 : winh*16);
         mix_offscreen_buffer(screen, buffer, ax, aw);
     }
 
@@ -450,8 +449,8 @@ void GFX::draw_tiles(uint8_t *screen, int line)
         uint8_t *buffer = get_offscreen_buffer();
         draw_plane_w(buffer, line);
 
-        int wx = (!winhright ? 0 : screen_width() - winh*16);
-        int ww = winh*16;
+        int wx = (!winhright ? 0 : winh*16);
+        int ww = (!winhright ? winh*16 : screen_width() - winh*16);
         mix_offscreen_buffer(screen, buffer, wx, ww);
     }
 }
