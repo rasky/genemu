@@ -373,7 +373,7 @@ void VDP::scanline_hblank(uint8_t *screen)
     }
 
     _vcounter++;
-    if (_vcounter == (VERSION_PAL ? 313 : 262))
+    if (_vcounter == (VERSION_PAL ? 312 : 262))
     {
         _vcounter = 0;
         sprite_overflow = 0;
@@ -410,7 +410,7 @@ unsigned int VDP::scanline_hblank_clocks(void)
 
 unsigned int VDP::num_scanlines(void)
 {
-    return VERSION_PAL ? 313 : 262;
+    return VERSION_PAL ? 312 : 262;
 }
 
 
