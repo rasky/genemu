@@ -4,8 +4,6 @@
 #define VDP_MASTER_FREQ       53693175     // NTSC
 //#define VDP_MASTER_FREQ       53203424   // PAL
 #define VDP_CYCLES_PER_LINE   3420
-#define VDP_HZ                60
-#define VDP_SCANLINES         262
 
 #define M68K_FREQ_DIVISOR     7
 #define Z80_FREQ_DIVISOR      14
@@ -25,7 +23,7 @@ private:
     uint16_t address_reg;
     uint8_t code_reg;
     uint16_t status_reg;
-    int vcounter;
+    int _vcounter;
     int line_counter_interrupt;
     bool command_word_pending;
     bool dma_fill_pending;
@@ -33,10 +31,14 @@ private:
     uint16_t hvcounter_latch;
     int sprite_overflow;
     bool sprite_collision;
+    int mode_h40;
+    int mode_pal;
 
 private:
     void register_w(int reg, uint8_t value);
+    int vcounter();
     int hcounter();
+    bool vblank();
     void dma_trigger();
     void dma_fill(uint16_t value);
     void dma_copy();
@@ -50,6 +52,9 @@ private:
 public:
     void scanline(uint8_t *screen);
     void reset();
+    unsigned int num_scanlines();
+
+public:
     uint16_t status_register_r();
     void control_port_w(uint16_t value);
     void data_port_w16(uint16_t value);

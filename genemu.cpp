@@ -68,6 +68,8 @@ int main(int argc, char *argv[])
 
     while (hw_poll())
     {
+        int numscanlines = VDP.num_scanlines();
+
         uint8_t *screen;
         int pitch;
         hw_beginframe(&screen, &pitch);
@@ -75,9 +77,9 @@ int main(int argc, char *argv[])
         int16_t *audio;
         hw_beginaudio(&audio);
         int audio_index = 0;
-        int audio_step = (HW_AUDIO_NUMSAMPLES << 16) / VDP_SCANLINES;
+        int audio_step = (HW_AUDIO_NUMSAMPLES << 16) / numscanlines;
 
-        for (int sl=0;sl<VDP_SCANLINES;++sl)
+        for (int sl=0;sl<numscanlines;++sl)
         {
             CPU_M68K.run(MASTER_CLOCK + VDP_CYCLES_PER_LINE);
             CPU_Z80 .run(MASTER_CLOCK + VDP_CYCLES_PER_LINE);

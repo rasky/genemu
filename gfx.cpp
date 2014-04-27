@@ -401,7 +401,7 @@ void GFX::render_scanline(uint8_t *screen, int line)
     if (BITS(VDP.regs[12], 1, 2) != 0)
         assert(!"interlace mode");
 
-    if (line >= 224)
+    if (line >= (VDP.mode_pal ? 240 : 224))
         return;
 
 #if 0
@@ -432,7 +432,7 @@ void GFX::render_scanline(uint8_t *screen, int line)
 
 
     // Display enable
-    memset(screen, 0, SCREEN_WIDTH);
+    memset(screen, 0, SCREEN_WIDTH*4);
     if (BIT(VDP.regs[0], 0))
         return;
 
