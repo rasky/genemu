@@ -63,10 +63,12 @@ int VDP::vcounter(void)
 {
     int vc = _vcounter;
 
-    if (VERSION_PAL && vc >= 0x10B)
-        vc += 0x1D2 - 0x10B - 1;
+    if (VERSION_PAL && mode_v40 && vc >= 0x10B)
+        vc += 0x1D2 - 0x10B;
+    else if (VERSION_PAL && !mode_v40 && vc >= 0x103)
+        vc += 0x1CA - 0x103;
     else if (!VERSION_PAL && vc >= 0xEB)
-        vc += 0x1E5 - 0xEB - 1;
+        vc += 0x1E5 - 0xEB;
     assert(vc < 0x200);
     return vc;
 }
@@ -119,17 +121,21 @@ void VDP::data_port_w16(uint16_t value)
     switch (code_reg & 0xF)
     {
     case 0x1:
-        // mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%d\n",
-        //     address_reg, REG15_DMA_INCREMENT, vcounter);
+        mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%d\n",
+                address_reg, REG15_DMA_INCREMENT, _vcounter);
         VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
         VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
         address_reg += REG15_DMA_INCREMENT;
         break;
     case 0x3:
+        mem_log("VDP", "Direct CRAM write: addr:%x increment:%d vcounter:%d\n",
+                address_reg, REG15_DMA_INCREMENT, _vcounter);
         CRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
         break;
     case 0x5:
+        mem_log("VDP", "Direct VSRAM write: addr:%x increment:%d vcounter:%d\n",
+                address_reg, REG15_DMA_INCREMENT, _vcounter);
         VSRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
         break;
@@ -263,8 +269,8 @@ uint16_t VDP::status_register_r(void)
     status |= STATUS_FIFO_EMPTY;
 
     // VBLANK bit
-    if ((!VERSION_PAL && vc >= 0xE0 && vc < 0x1FF) ||
-        ( VERSION_PAL && vc >= 0xF0 && vc < 0x1FF) ||
+    if ((!mode_v40 && vc >= 0xE0 && vc < 0x1FF) ||
+        ( mode_v40 && vc >= 0xF0 && vc < 0x1FF) ||
         !REG1_DISP_ENABLED)
         status |= STATUS_VBLANK;
 
@@ -301,6 +307,8 @@ uint16_t VDP::hvcounter_r16(void)
     assert(vc < 512);
     assert(hc < 512);
 
+    mem_log("VDP", "VCounter read: %x\n", vc);
+
     return ((vc & 0xFF) << 8) | (hc >> 1);
 }
 
@@ -336,6 +344,7 @@ void VDP::scanline_begin(uint8_t *screen)
         line_counter_interrupt = REG10_LINE_COUNTER;
     }
 
+    mem_log("VDP", "render scanline %d\n", _vcounter);
     gfx_render_scanline(screen, _vcounter);
 }
 
@@ -373,7 +382,7 @@ void VDP::scanline_hblank(uint8_t *screen)
     }
 
     _vcounter++;
-    if (_vcounter == (VERSION_PAL ? 312 : 262))
+    if (_vcounter == (VERSION_PAL ? 313 : 262))
     {
         _vcounter = 0;
         sprite_overflow = 0;
@@ -410,7 +419,7 @@ unsigned int VDP::scanline_hblank_clocks(void)
 
 unsigned int VDP::num_scanlines(void)
 {
-    return VERSION_PAL ? 312 : 262;
+    return VERSION_PAL ? 313 : 262;
 }
 
 
@@ -453,6 +462,8 @@ void VDP::dma_fill(uint16_t value)
 
     if (length == 0)
         length = 0xFFFF;
+
+    mem_log("VDP", "DMA fill: src:%04x dst:%04x len:%x\n", src_addr_low, address_reg&0xFFFF, length);
 
     switch (code_reg & 0xF)
     {
@@ -500,6 +511,11 @@ void VDP::dma_m68k()
     // Special case for length = 0 (ex: sonic3d)
     if (length == 0)
         length = 0xFFFF;
+
+    mem_log("VDP", "(V=%x,H=%x) DMA M68k->%s copy: src:%04x, dst:%04x, length:%d, increment:%d\n",
+        vcounter(), hcounter(),
+        (code_reg&0xF)==1 ? "VRAM" : ( (code_reg&0xF)==3 ? "CRAM" : "VSRAM"),
+        (src_addr_high | src_addr_low) << 1, address_reg, length, REG15_DMA_INCREMENT);
 
     do {
         unsigned int value = m68k_read_memory_16((src_addr_high | src_addr_low) << 1);
@@ -608,8 +624,8 @@ void vdp_mem_w16(unsigned int address, unsigned int value)
             return;
 
         default:
-            fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled write16 IO:%02x val:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F, value);
-            assert(!"unhandled vdp_mem_w16");
+            fprintf(stderr, "[VDP][PC=%06x](%04d) unhandled write16 IO:%02x val:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F, value);
+            //assert(!"unhandled vdp_mem_w16");
     }
 
 }
@@ -639,14 +655,14 @@ unsigned int vdp_mem_r16(unsigned int address)
         case 0xE: return VDP.hvcounter_r16();
 
         // unused register, see vdpfifotesting
-        case 0x18: return 0xFF;
+        case 0x18: return 0xFFFF;
 
         // debug register
-        case 0x1C: return 0xFF;
+        case 0x1C: return 0xFFFF;
 
         default:
-            fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled read16 IO:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F);
-            assert(!"unhandled vdp_mem_r16");
-            return 0xFF;
+            fprintf(stderr, "[VDP][PC=%06x](%04d) unhandled read16 IO:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F);
+            //assert(!"unhandled vdp_mem_r16");
+            return 0xFFFF;
     }
 }
