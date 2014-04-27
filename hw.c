@@ -30,9 +30,15 @@ void hw_init(void)
     }
     atexit(SDL_Quit);
 
+#if 1
+    screen = SDL_CreateWindow("Genemu - Sega Genesis Emulator",
+        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+        320*ZOOM, 224*ZOOM, 0);
+    renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_PRESENTVSYNC);
+#else
     SDL_CreateWindowAndRenderer(320*ZOOM, 224*ZOOM, SDL_WINDOW_RESIZABLE,
         &screen, &renderer);
-
+#endif
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");  // make the scaled rendering look smoother.
     SDL_RenderSetLogicalSize(renderer, 320, 224);
 
