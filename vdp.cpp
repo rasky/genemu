@@ -262,6 +262,9 @@ uint16_t VDP::status_register_r(void)
             status |= STATUS_HBLANK;
     }
 
+    if (vcounter == 224 && status & STATUS_HBLANK)
+        status |= STATUS_VIRQPENDING;
+
     if (sprite_overflow)
         status |= STATUS_SPRITEOVERFLOW;
 
