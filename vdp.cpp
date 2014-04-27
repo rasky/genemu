@@ -31,12 +31,12 @@ class VDP VDP;
 // Return 9-bit accurate hcounter
 int VDP::hcounter(void)
 {
-    int mclk = m68k_cycles_run() * M68K_FREQ_DIVISOR;
+    int mclk = CPU_M68K.clock() % VDP_CYCLES_PER_LINE;
     int pixclk;
 
     // Accurate 9-bit hcounter emulation, from timing posted here:
     // http://gendev.spritesmind.net/forum/viewtopic.php?p=17683#17683
-    if (REG12_MODE_H40)
+    if (mode_h40)
     {
         pixclk = mclk * 420 / VDP_CYCLES_PER_LINE;
         enum { SPLIT_POINT = 13+320+14+2 };
@@ -54,6 +54,22 @@ int VDP::hcounter(void)
     }
 
     return pixclk & 0x1FF;
+}
+
+int VDP::vcounter(void)
+{
+    int vc = _vcounter;
+    int hc = hcounter();
+
+    if (vc >= 0xEB)
+        vc -= 0xEB - 0xE5;
+
+    // if ((REG12_MODE_H40 && (hc >= 0x14A || hc < 0xD)) ||
+    //     (!REG12_MODE_H40 && (hc >= 0x10A || hc < 0xB)))
+    //     vc = (vc + 1) & 0xFF;
+
+    assert (vc < 256);
+    return vc;
 }
 
 void VDP::register_w(int reg, uint8_t value)
@@ -242,23 +258,24 @@ uint16_t VDP::status_register_r(void)
 
     uint16_t status = status_reg;
     int hc = hcounter();
+    int vc = vcounter();
 
     // TODO: FIFO not emulated
     status |= STATUS_FIFO_EMPTY;
 
     // VBLANK bit
-    if (vcounter >= 224 || !REG1_DISP_ENABLED)
+    if ((vc >= 0xE0 && vc < 0xFF) || !REG1_DISP_ENABLED)
         status |= STATUS_VBLANK;
 
     // HBLANK bit (see Nemesis doc, as linked in hcounter())
-    if (REG12_MODE_H40)
+    if (mode_h40)
     {
-        if (hc < 0xA || hc >= 0x166)
+        if (hc < 0xB || hc >= 0x166)
             status |= STATUS_HBLANK;
     }
     else
     {
-        if (hc < 0x9 || hc >= 0x126)
+        if (hc < 0xA || hc >= 0x126)
             status |= STATUS_HBLANK;
     }
 
@@ -279,62 +296,104 @@ uint16_t VDP::hvcounter_r16(void)
     if (hvcounter_latched)
         return hvcounter_latch;
 
-    int hc = hcounter() >> 1;
-    int vc = vcounter;
-
-    if (vc >= 0xEB) vc -= 0xEB - 0xE5;
+    int hc = hcounter();
+    int vc = vcounter();
     assert(vc < 256);
-    assert(hc < 256);
+    assert(hc < 512);
 
-    return (vc << 8) | hc;
+    return (vc << 8) | (hc >> 1);
 }
 
-void VDP::scanline(uint8_t* screen)
+void VDP::scanline_begin(uint8_t *screen)
 {
-    bool hirq = false;
-
-    vcounter++;
-    if (vcounter == 262)
+    mode_h40 = REG12_MODE_H40;
+    if (mode_h40)
     {
-        vcounter = 0;
-        sprite_overflow = 0;
+        if (hcounter() != 0xD)
+        {
+            printf("HCOUNTER40 ERROR: hc:%x, mclck:%lld\n", hcounter(), CPU_M68K.clock() % VDP_CYCLES_PER_LINE);
+            assert(0);
+        }
+    }
+    else
+    {
+        assert(hcounter() == 0xB);
     }
 
     // On these linese, the line counter interrupt is reloaded
-    if (vcounter == 0 || (vcounter >= 225 && vcounter <= 261))
+    if  (_vcounter == 0)
     {
         if (REG0_LINE_INTERRUPT)
-            mem_log("VDP", "HINTERRUPT counter reloaded: (vcounter: %d, new counter: %d)\n", vcounter, REG10_LINE_COUNTER);
+            mem_log("VDP", "HINTERRUPT counter reloaded: (_vcounter: %d, new counter: %d)\n", _vcounter, REG10_LINE_COUNTER);
         line_counter_interrupt = REG10_LINE_COUNTER;
     }
 
-    if (--line_counter_interrupt < 0)
+    gfx_render_scanline(screen, _vcounter);
+}
+
+void VDP::scanline_hblank(uint8_t *screen)
+{
+    if (mode_h40)
     {
-        if (REG0_LINE_INTERRUPT && vcounter <= 224)
+        if (hcounter() != 0x14A)
         {
-            mem_log("VDP", "HINTERRUPT (vcounter: %d, new counter: %d)\n", vcounter, REG10_LINE_COUNTER);
-            CPU_M68K.irq(4);
-            hirq = true;
+            printf("ERROR HCOUNTER40 %x\n", hcounter());
+            assert(0);
         }
-
-        line_counter_interrupt = REG10_LINE_COUNTER;
+    }
+    else
+    {
+        if (hcounter() != 0x10A)
+        {
+            printf("ERROR HCOUNTER32 %x\n", hcounter());
+            assert(0);
+        }
     }
 
-    if (vcounter == 225)   // vblank begin
+    if (_vcounter < 224)
+    {
+        if (--line_counter_interrupt < 0)
+        {
+            if (REG0_LINE_INTERRUPT)
+            {
+                mem_log("VDP", "HINTERRUPT (_vcounter: %d, new counter: %d)\n", _vcounter, REG10_LINE_COUNTER);
+                CPU_M68K.irq(4);
+            }
+
+            line_counter_interrupt = REG10_LINE_COUNTER;
+        }
+    }
+
+    _vcounter++;
+    if (_vcounter == 262)
+    {
+        _vcounter = 0;
+        sprite_overflow = 0;
+    }
+}
+
+void VDP::scanline_end(uint8_t* screen)
+{
+    if (_vcounter == 225)   // vblank begin
     {
         if (REG1_VBLANK_INTERRUPT)
             CPU_M68K.irq(6);
         CPU_Z80.set_irq_line(true);
     }
-    if (vcounter == 226)
+    if (_vcounter == 226)
     {
         // The Z80 IRQ line stays asserted for one line
         CPU_Z80.set_irq_line(false);
     }
-
-    gfx_render_scanline(screen, vcounter);
 }
 
+unsigned int VDP::scanline_hblank_clocks(void)
+{
+    if (mode_h40)
+        return ((0x14B - 0xD) * VDP_CYCLES_PER_LINE + 420/2) / 420;
+    else
+        return ((0x10A - 0xB) * VDP_CYCLES_PER_LINE + 342/2) / 342;
+}
 
 
 /**************************************************************
@@ -491,7 +550,7 @@ void VDP::reset()
     command_word_pending = false;
     address_reg = 0;
     code_reg = 0;
-    vcounter = 0;
+    _vcounter = 0;
     status_reg = 0x3C00;
     line_counter_interrupt = 0;
     hvcounter_latched = false;
@@ -573,14 +632,3 @@ unsigned int vdp_mem_r16(unsigned int address)
             return 0xFF;
     }
 }
-
-void vdp_scanline(uint8_t *screen)
-{
-    VDP.scanline(screen);
-}
-
-void vdp_init(void)
-{
-    VDP.reset();
-}
-

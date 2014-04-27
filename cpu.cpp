@@ -1,6 +1,7 @@
 #include "vdp.h"
 #include "mem.h"
 #include "cpu.h"
+#include <assert.h>
 
 int activecpu;
 
@@ -24,7 +25,9 @@ void CpuM68K::run(uint64_t target)
 
 uint64_t CpuM68K::clock(void)
 {
-    return _clock + m68k_cycles_run() * M68K_FREQ_DIVISOR;
+    if (m68k_cycles_remaining() > 0)
+        return _clock + m68k_cycles_run() * M68K_FREQ_DIVISOR;
+    return _clock;
 }
 
 void CpuM68K::reset(void)
@@ -75,7 +78,7 @@ uint64_t CpuZ80::clock(void)
 
 void CpuZ80::sync(void)
 {
-    mem_log("Z80", "Sync up to: %ld\n", CPU_M68K.clock());
+    mem_log("Z80", "Sync up to: %ld (PC: %04x)\n", CPU_M68K.clock(), _cpu.PC.W);
     run(CPU_M68K.clock());
 }
 
@@ -109,7 +112,7 @@ bool CpuZ80::set_reset_line(bool line)
     }
     else
     {
-        if (clock() >= _reset_start + (4*8)*Z80_FREQ_DIVISOR)
+        if (clock() >= _reset_start + (1*8)*Z80_FREQ_DIVISOR)
         {
             mem_log("Z80", "Reset triggered (%ld, %ld)\n", clock(), _reset_start);
             ResetZ80(&_cpu);

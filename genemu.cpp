@@ -62,9 +62,10 @@ int main(int argc, char *argv[])
     CPU_Z80.init();
 
     hw_init();
-    vdp_init();
+
     MASTER_CLOCK = 0;
     CPU_M68K.reset();
+    VDP.reset();
 
     while (hw_poll())
     {
@@ -79,17 +80,29 @@ int main(int argc, char *argv[])
 
         for (int sl=0;sl<VDP_SCANLINES;++sl)
         {
-            CPU_M68K.run(MASTER_CLOCK + VDP_CYCLES_PER_LINE);
-            CPU_Z80 .run(MASTER_CLOCK + VDP_CYCLES_PER_LINE);
+            VDP.scanline_begin(screen);
+            printf("PRE: %lld\n", CPU_M68K.clock());
 
-            vdp_scanline(screen);
+            int hblank_clocks = VDP.scanline_hblank_clocks();
+
+            CPU_M68K.run(MASTER_CLOCK + hblank_clocks);
+            CPU_Z80 .run(MASTER_CLOCK + hblank_clocks);
+            MASTER_CLOCK += hblank_clocks;
+
+            printf("HBLANK: %lld  mod:%lld (req clocks: %d)\n", CPU_M68K.clock(), CPU_M68K.clock() % VDP_CYCLES_PER_LINE, hblank_clocks);
+            VDP.scanline_hblank(screen);
+
+            CPU_M68K.run(MASTER_CLOCK + VDP_CYCLES_PER_LINE - hblank_clocks);
+            CPU_Z80 .run(MASTER_CLOCK + VDP_CYCLES_PER_LINE - hblank_clocks);
+            MASTER_CLOCK += VDP_CYCLES_PER_LINE - hblank_clocks;
+
+            printf("END: %lld\n", CPU_M68K.clock());
+            VDP.scanline_end(screen);
             screen += pitch;
 
             int prev_index = audio_index;
             audio_index += audio_step;
             YM2612Update(audio + ((prev_index+0x8000)>>16)*2, (audio_index-prev_index+0x8000)>>16);
-
-            MASTER_CLOCK += VDP_CYCLES_PER_LINE;
         }
 
         hw_endaudio();
