@@ -33,6 +33,7 @@ struct memfunc_pair {
     memfunc_w write8, write16;
 };
 
+#define MEMFUN_READONLY(x)     ((void*)((unsigned long)(x) | 2))
 #define MEMFUN_PAIR(x)         ((void*)((unsigned long)(x) | 1))
 #define GET_MEMFUNC_PAIR(x)    ((memfunc_pair*)((unsigned long)(x) & ~1))
 
@@ -77,21 +78,25 @@ static void z80area_mem_w8(unsigned int address, unsigned int value)
 
 static unsigned int exp_mem_r8(unsigned int address)
 {
-    mem_log("MEM", "read8 from expansion area %06x\n", address);
+    mem_err("MEM", "read8 from expansion area %06x\n", address);
     return 0xFF;
 }
 static unsigned int exp_mem_r16(unsigned int address)
 {
-    mem_log("MEM", "read16 from expansion area %06x\n", address);
+    mem_err("MEM", "read16 from expansion area %06x\n", address);
     return m68k_read_memory_16(CPU_M68K.PC()) & 0xFF00;
 }
 static void exp_mem_w8(unsigned int address, unsigned int value)
 {
-    mem_log("MEM", "write8 from expansion area %06x: %04x\n", address, value);
+    mem_err("MEM", "write8 from expansion area %06x: %04x\n", address, value);
 }
 static void exp_mem_w16(unsigned int address, unsigned int value)
 {
-    mem_log("MEM", "write16 from expansion area %06x: %04x\n", address, value);
+    // TMSS protection device, games just write "SEGA" here
+    if (address == 0x4000 || address == 0x4002)
+        return;
+
+    mem_err("MEM", "write16 from expansion area %06x: %04x\n", address, value);
 }
 
 /********************************************
@@ -265,18 +270,20 @@ template<class TYPE>
 unsigned int m68k_read_memory(unsigned int address)
 {
     assert((address >> 16) < 256);
-    void *t = m68k_memtable[address >> 16];
+    unsigned long t = (unsigned long)m68k_memtable[address >> 16];
     if (t) {
-        if (!((unsigned long)t & 1)) {
+        if (!(t & 1)) {
+            t = (t & ~3) + (address & 0xFFFF);
             if (sizeof(TYPE) == 2)
-                return SWAP16(*(uint16_t*)((uint8_t*)t + (address & 0xFFFF)));
-            return *((TYPE*)t + (address & 0xFFFF));
+                return SWAP16(*(uint16_t*)t);
+            else
+                return *(uint8_t*)t;
         }
         if (sizeof(TYPE) == 2)
             return GET_MEMFUNC_PAIR(t)->read16(address);
         return GET_MEMFUNC_PAIR(t)->read8(address);
     }
-    mem_log("MEM", "unknown read%ld at %06x\n", sizeof(TYPE)*8, address);
+    mem_err("MEM", "unknown read%ld at %06x\n", sizeof(TYPE)*8, address);
     return 0xFFFFFFFF & ((1L<<(sizeof(TYPE)*8)) - 1);
 }
 
@@ -284,13 +291,19 @@ template<class TYPE>
 void m68k_write_memory(unsigned int address, unsigned int value)
 {
     assert((address >> 16) < 256);
-    void *t = m68k_memtable[address >> 16];
+    unsigned long t = (unsigned long)m68k_memtable[address >> 16];
     if (t) {
-        if (!((unsigned long)t & 1)) {
+        if (!(t & 1)) {
+            if (t & 2)
+            {
+                mem_err("MEM", "Writing to ROM: %06x <- %0*x\n", address, (int)sizeof(TYPE)*2, value);
+                return;
+            }
+            t = (t & ~3) + (address & 0xFFFF);
             if (sizeof(TYPE) == 2)
-                *(uint16_t*)((uint8_t*)t + (address & 0xFFFF)) = SWAP16(value & 0xFFFF);
+                *(uint16_t*)t = SWAP16(value & 0xFFFF);
             else
-                *(uint8_t*)((uint8_t*)t + (address & 0xFFFF)) = value & 0xFF;
+                *(uint8_t*)t = value & 0xFF;
             return;
         }
         if (sizeof(TYPE) == 2)
@@ -299,7 +312,7 @@ void m68k_write_memory(unsigned int address, unsigned int value)
            GET_MEMFUNC_PAIR(t)->write8(address, value);
         return;
     }
-    mem_log("MEM", "unknown write%ld at %06x: %0*x\n",
+    mem_err("MEM", "unknown write%ld at %06x: %0*x\n",
         sizeof(TYPE)*8, address, (int)sizeof(TYPE)*2, value);
 }
 
@@ -474,7 +487,7 @@ void mem_init(int romsize)
     {
         mem_log("ROM", "Mirror from %02x0000\n", j);
         for (int i=0;i<romsize;++i)
-            m68k_memtable[i+j] = ROM + i*65536;
+            m68k_memtable[i+j] = MEMFUN_READONLY(ROM + i*65536);
     }
 
     m68k_memtable[0xA1] = MEMFUN_PAIR(&IO);
@@ -519,6 +532,20 @@ void mem_log(const char *subs, const char *fmt, ...)
         fprintf(stdout, "[%s][ZPC=%06x](%04d) ", subs, CPU_Z80.PC(), framecounter);
     va_start(va, fmt);
     vfprintf(stdout, fmt, va);
+    va_end(va);
+}
+
+void mem_err(const char *subs, const char *fmt, ...)
+{
+    extern int framecounter;
+    va_list va;
+
+    if (activecpu == 0)
+        fprintf(stderr, "[%s][MPC=%06x](%04d) ", subs, CPU_M68K.PC(), framecounter);
+    else
+        fprintf(stderr, "[%s][ZPC=%06x](%04d) ", subs, CPU_Z80.PC(), framecounter);
+    va_start(va, fmt);
+    vfprintf(stderr, fmt, va);
     va_end(va);
 }
 
