@@ -9873,7 +9873,11 @@ M68KMAKE_OP(tas, 8, ., .)
 	FLAG_N = NFLAG_8(dst);
 	FLAG_V = VFLAG_CLEAR;
 	FLAG_C = CFLAG_CLEAR;
+#if 0
+	// This is a hardware bug on Megadrive hardware
+	// Ex-Mutants doesn't work if this bug is not emulated
 	m68ki_write_8(ea, dst | 0x80);
+#endif
 }
 
 
