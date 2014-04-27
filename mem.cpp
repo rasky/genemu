@@ -428,10 +428,10 @@ int load_smd(const char *fn)
         exit(1);
     }
 
-    uint8_t nblocks;
+    int nblocks = 0;
     fread(&nblocks, 1, 1, f);
     if (nblocks == 0)
-        nblocks = 128;
+        nblocks = 256;
     fseek(f, 512, SEEK_SET);
 
     ROM = (uint8_t*)malloc(nblocks * 16*1024);
