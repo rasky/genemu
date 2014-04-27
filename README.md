@@ -6,6 +6,14 @@ game emulators. It is not meant to ever grow user-friendly features for now,
 and can just be used as a source code reference on how emulators works. It focuses
 only on accuracy (not performance).
 
+How to use
+==========
+
+   $ genemu romfile [GG-CODE [GG-CODE ...]]
+
+Genemu supports both bin and smd romfiles. You can specify zero or more Game Genie
+codes on the command line, and they will be applied at startup.
+
 
 What's emulated
 ===============
