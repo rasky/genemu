@@ -46,6 +46,11 @@ void CpuZ80::init(void)
     _clock = 0;
 }
 
+void CpuZ80::reset(void)
+{
+    ResetZ80(&_cpu);
+}
+
 void CpuZ80::run(uint64_t target)
 {
     if (_clock >= target)
