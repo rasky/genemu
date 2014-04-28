@@ -5,6 +5,7 @@ extern "C" {
 #include "vdp.h"
 #include "cpu.h"
 #include "mem.h"
+#include "state.h"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
@@ -14,6 +15,7 @@ extern "C" {
 
 int framecounter;
 uint64_t MASTER_CLOCK;   // VDP_MASTER_FREQ
+char romname[2048];
 
 
 int main(int argc, char *argv[])
@@ -29,6 +31,7 @@ int main(int argc, char *argv[])
         romsize = load_smd(argv[1]);
     else
         romsize = load_bin(argv[1]);
+    strcpy(romname, argv[1]);
     mem_init(romsize);
 
     for (int i=2;i<argc;++i)
@@ -92,6 +95,8 @@ int main(int argc, char *argv[])
         hw_endaudio();
         hw_endframe();
         ++framecounter;
+
+        state_poll();
     }
 
 #if 0
@@ -102,4 +107,15 @@ int main(int argc, char *argv[])
 #endif
 
     return 0;
+}
+
+
+extern "C" void gentrace(void);
+void gentrace(void)
+{
+    uint32_t pc = m68k_get_reg(NULL, M68K_REG_PC);
+
+    char buf[2048];
+    int oplen = m68k_disassemble(buf, pc, M68K_CPU_TYPE_68000);
+    fprintf(stdout, "%06x\t%s\t\t[A0=%08x]\n", pc, buf, m68k_get_reg(NULL, M68K_REG_A0));
 }

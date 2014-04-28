@@ -19,6 +19,9 @@ public:
 
 class CpuZ80
 {
+    friend void loadstate(const char *fn);
+    friend void savestate(const char *fn);
+
 private:
     Z80 _cpu;
     uint64_t _clock;
@@ -30,6 +33,7 @@ private:
 
 public:
     void init();
+    void reset();
     void run(uint64_t target_cycles);
     void sync();
     uint64_t clock();

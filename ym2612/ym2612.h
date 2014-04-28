@@ -22,7 +22,12 @@ extern void YM2612ResetChip(void);
 extern void YM2612Update(int16_t *buffer, int length);
 extern void YM2612Write(unsigned int a, unsigned int v);
 extern unsigned int YM2612Read(void);
+#if 0
 extern int YM2612LoadContext(unsigned char *state);
 extern int YM2612SaveContext(unsigned char *state);
+#endif
+
+extern void YM2612LoadRegs(uint8_t *regs);
+extern void YM2612SaveRegs(uint8_t *regs);
 
 #endif /* _YM2612_ */

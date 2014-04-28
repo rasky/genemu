@@ -13,6 +13,9 @@ static uint8_t framebuf[320*224*4];
 static int16_t AUDIO_BUF[HW_AUDIO_NUMBUFFERS][HW_AUDIO_NUMSAMPLES*2];
 static int audio_buf_index_w=1, audio_buf_index_r=0;
 const uint8_t *keystate;
+uint8_t keypressed[256];
+uint8_t keyreleased[256];
+static uint8_t keyoldstate[256];
 static clock_t frameclock;
 static int framecounter;
 static int audiocounter;
@@ -73,6 +76,8 @@ int hw_poll(void)
 {
     SDL_Event event;
 
+    memcpy(keyoldstate, keystate, 256);
+
     while ( SDL_PollEvent(&event) )
     {
         if (event.type == SDL_QUIT)
@@ -83,6 +88,17 @@ int hw_poll(void)
             if ( event.key.keysym.sym == SDLK_ESCAPE )
                 return 0;
         }
+    }
+
+    for (int i=0;i<256;++i)
+    {
+        if (keystate[i] ^ keyoldstate[i])
+        {
+            keypressed[i] = keystate[i];
+            keyreleased[i] = keyoldstate[i];
+        }
+        else
+            keypressed[i] = keyreleased[i] = 0;
     }
 
     return 1;

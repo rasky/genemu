@@ -13,6 +13,8 @@
 class VDP
 {
     friend class GFX;
+    friend void loadstate(const char *fn);
+    friend void savestate(const char *fn);
 
 private:
     uint8_t VRAM[0x10000];

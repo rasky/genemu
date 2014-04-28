@@ -626,6 +626,8 @@ static INT32  mem;        /* one sample delay memory */
 static INT32  out_fm[8];  /* outputs of working channels */
 static UINT32 bitmask;    /* working channels output bitmasking (DAC quantization) */
 
+/* mirror of all OPN registers */
+static uint8_t OPNREGS[512];
 
 INLINE void FM_KEYON(FM_CH *CH , int s )
 {
@@ -1568,6 +1570,8 @@ INLINE void OPNWriteReg(int r, int v)
   FM_CH *CH;
   FM_SLOT *SLOT;
 
+  OPNREGS[r] = v;
+
   UINT8 c = OPN_CHAN(r);
 
   if (c == 3) return; /* 0xX3,0xX7,0xXB,0xXF */
@@ -2133,6 +2137,19 @@ void YM2612Config(unsigned char dac_bits)
     }
   }
 }
+
+void YM2612SaveRegs(uint8_t *regs)
+{
+  memcpy(regs, OPNREGS, sizeof(OPNREGS));
+}
+
+void YM2612LoadRegs(uint8_t *regs)
+{
+  int i;
+  for (i=0;i<sizeof(OPNREGS);++i)
+    OPNWriteReg(i, *regs++);
+}
+
 
 #if 0
 int YM2612LoadContext(unsigned char *state)
