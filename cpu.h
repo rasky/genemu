@@ -30,7 +30,6 @@ private:
 
 public:
     void init();
-    void reset();
     void run(uint64_t target_cycles);
     void sync();
     uint64_t clock();
