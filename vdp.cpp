@@ -29,6 +29,17 @@ extern int framecounter;
 #define REG23_DMA_SRCADDR_HIGH ((regs[23] & 0x7F) << 16)
 #define REG23_DMA_TYPE        BITS(regs[23], 6, 2)
 
+#define STATUS_FIFO_EMPTY      (1<<9)
+#define STATUS_FIFO_FULL       (1<<8)
+#define STATUS_VIRQPENDING     (1<<7)
+#define STATUS_SPRITEOVERFLOW  (1<<6)
+#define STATUS_SPRITECOLLISION (1<<5)
+#define STATUS_ODDFRAME        (1<<4)
+#define STATUS_VBLANK          (1<<3)
+#define STATUS_HBLANK          (1<<2)
+#define STATUS_DMAPROGRESS     (1<<1)
+#define STATUS_PAL             (1<<0)
+
 class VDP VDP;
 
 // Return 9-bit accurate hcounter
@@ -73,6 +84,29 @@ int VDP::vcounter(void)
     return vc;
 }
 
+bool VDP::hblank(void)
+{
+    int hc = hcounter();
+
+    if (mode_h40)
+        return (hc < 0xB || hc >= 0x166);
+    else
+        return (hc < 0xA || hc >= 0x126);
+}
+
+bool VDP::vblank(void)
+{
+    int vc = vcounter();
+
+    if (!REG1_DISP_ENABLED)
+        return true;
+
+    if (mode_v40)
+        return (vc >= 0xF0 && vc < 0x1FF);
+    else
+        return (vc >= 0xE0 && vc < 0x1FF);
+}
+
 void VDP::register_w(int reg, uint8_t value)
 {
     // Mode4 is not emulated yet. Anyway, access to registers > 0xA is blocked.
@@ -103,26 +137,58 @@ void VDP::register_w(int reg, uint8_t value)
 
 }
 
-
-void VDP::push_fifo(uint16_t value)
+static const int fifo_delay[2][2] =
 {
+    /* MODE H32 */
+    { 16, 167 },
+    /* MODE H40 */
+    { 18, 205 },
+};
+
+bool VDP::fifo_empty()
+{
+    uint64_t now = CPU_M68K.clock();
+    return now > fifoclock[0];
+}
+
+bool VDP::fifo_full()
+{
+    uint64_t now = CPU_M68K.clock();
+    return now < fifoclock[3];
+}
+
+void VDP::push_fifo(uint16_t value, int numbytes)
+{
+    #define MAX(a,b)  ((a)>(b)?(a):(b))
+    #define PIXELRATE_TO_CLOCKS(n)  (VDP_CYCLES_PER_LINE / (n))
+
     fifo[3] = fifo[2];
     fifo[2] = fifo[1];
     fifo[1] = fifo[0];
     fifo[0] = value;
+
+    uint64_t now = CPU_M68K.clock();
+    uint64_t end = MAX(fifoclock[0], now) + PIXELRATE_TO_CLOCKS(fifo_delay[mode_h40][vblank()] / numbytes);
+    if (fifoclock[3] > now)
+    {
+        //CPU_M68K.burn(fifoclock[3]);
+    }
+    fifoclock[3] = fifoclock[2];
+    fifoclock[2] = fifoclock[1];
+    fifoclock[1] = fifoclock[0];
+    fifoclock[0] = end;
 }
 
 void VDP::data_port_w16(uint16_t value)
 {
     command_word_pending = false;
 
-    push_fifo(value);
-
     switch (code_reg & 0xF)
     {
     case 0x1:
         mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%d\n",
                 address_reg, REG15_DMA_INCREMENT, _vcounter);
+        push_fifo(value, 2);
         VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
         VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
         address_reg += REG15_DMA_INCREMENT;
@@ -130,12 +196,14 @@ void VDP::data_port_w16(uint16_t value)
     case 0x3:
         mem_log("VDP", "Direct CRAM write: addr:%x increment:%d vcounter:%d\n",
                 address_reg, REG15_DMA_INCREMENT, _vcounter);
+        push_fifo(value, 1);
         CRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
         break;
     case 0x5:
         mem_log("VDP", "Direct VSRAM write: addr:%x increment:%d vcounter:%d\n",
                 address_reg, REG15_DMA_INCREMENT, _vcounter);
+        push_fifo(value, 1);
         VSRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
         break;
@@ -144,10 +212,12 @@ void VDP::data_port_w16(uint16_t value)
     case 0x4:
     case 0x8:
         // Write operation after setting up read: ignored (ex: ecco2, aladdin)
+        push_fifo(value, 1);
         break;
 
     case 0x9:
         // invalid, ignore (vdpfifotesting)
+        push_fifo(value, 1);
         break;
 
     default:
@@ -160,8 +230,8 @@ void VDP::data_port_w16(uint16_t value)
     if (dma_fill_pending)
     {
         dma_fill_pending = false;
-        dma_fill(value);
-        return;
+        status_reg |= STATUS_DMAPROGRESS;
+        dma_poll();
     }
 }
 
@@ -219,6 +289,8 @@ uint16_t VDP::data_port_r16(void)
 
 void VDP::control_port_w(uint16_t value)
 {
+    assert(!(status_reg & STATUS_DMAPROGRESS));
+
     if (command_word_pending) {
         // second half of the command word
         code_reg &= ~0x3C;
@@ -227,8 +299,8 @@ void VDP::control_port_w(uint16_t value)
         address_reg |= value << 14;
         command_word_pending = false;
         fprintf(stdout, "[VDP][PC=%06x](%04d) command word 2nd: code:%02x addr:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg, address_reg);
-        if (code_reg & (1<<5))
-            dma_trigger();
+        if ((code_reg & (1<<5)) && REG1_DMA_ENABLED)
+            dma_start();
         return;
     }
 
@@ -250,46 +322,28 @@ void VDP::control_port_w(uint16_t value)
 
 uint16_t VDP::status_register_r(void)
 {
-    #define STATUS_FIFO_EMPTY      (1<<9)
-    #define STATUS_FIFO_FULL       (1<<8)
-    #define STATUS_VIRQPENDING     (1<<7)
-    #define STATUS_SPRITEOVERFLOW  (1<<6)
-    #define STATUS_SPRITECOLLISION (1<<5)
-    #define STATUS_ODDFRAME        (1<<4)
-    #define STATUS_VBLANK          (1<<3)
-    #define STATUS_HBLANK          (1<<2)
-    #define STATUS_DMAPROGRESS     (1<<1)
-    #define STATUS_PAL             (1<<1)
-
     uint16_t status = status_reg;
     int hc = hcounter();
     int vc = vcounter();
 
-    // TODO: FIFO not emulated
-    status |= STATUS_FIFO_EMPTY;
+    if (fifo_empty())
+        status |= STATUS_FIFO_EMPTY;
+    if (fifo_full())
+        status |= STATUS_FIFO_FULL;
 
-    // VBLANK bit
-    if ((!mode_v40 && vc >= 0xE0 && vc < 0x1FF) ||
-        ( mode_v40 && vc >= 0xF0 && vc < 0x1FF) ||
-        !REG1_DISP_ENABLED)
+    // VBLANK/HBLANK bit
+    if (vblank())
         status |= STATUS_VBLANK;
-
-    // HBLANK bit (see Nemesis doc, as linked in hcounter())
-    if (mode_h40)
-    {
-        if (hc < 0xB || hc >= 0x166)
-            status |= STATUS_HBLANK;
-    }
-    else
-    {
-        if (hc < 0xA || hc >= 0x126)
-            status |= STATUS_HBLANK;
-    }
+    if (hblank())
+        status |= STATUS_HBLANK;
 
     if (sprite_overflow)
         status |= STATUS_SPRITEOVERFLOW;
     if (VERSION_PAL)
         status |= STATUS_PAL;
+
+    status &= 0x3FF;
+    status |= m68k_read_memory_16(CPU_M68K.PC() & 0xFFFFFF) & 0xFC00;
 
     // reading the status clears the pending flag for command words
     command_word_pending = false;
@@ -323,18 +377,18 @@ void VDP::scanline_begin(uint8_t *screen)
 {
     mode_h40 = REG12_MODE_H40;
 
-    if (mode_h40)
-    {
-        if (hcounter() != 0xD)
-        {
-            printf("HCOUNTER40 ERROR: hc:%x, mclck:%lld\n", hcounter(), CPU_M68K.clock() % VDP_CYCLES_PER_LINE);
-            assert(0);
-        }
-    }
-    else
-    {
-        assert(hcounter() == 0xB);
-    }
+    // if (mode_h40)
+    // {
+    //     if (hcounter() != 0xD)
+    //     {
+    //         printf("HCOUNTER40 ERROR: hc:%x, mclck:%lld\n", hcounter(), CPU_M68K.clock() % VDP_CYCLES_PER_LINE);
+    //         assert(0);
+    //     }
+    // }
+    // else
+    // {
+    //     assert(hcounter() == 0xB);
+    // }
 
     // On these linese, the line counter interrupt is reloaded
     if  (_vcounter == 0)
@@ -344,28 +398,30 @@ void VDP::scanline_begin(uint8_t *screen)
         line_counter_interrupt = REG10_LINE_COUNTER;
     }
 
+    dma_poll();
+
     mem_log("VDP", "render scanline %d\n", _vcounter);
     gfx_render_scanline(screen, _vcounter);
 }
 
 void VDP::scanline_hblank(uint8_t *screen)
 {
-    if (mode_h40)
-    {
-        if (hcounter() != 0x14A)
-        {
-            printf("ERROR HCOUNTER40 %x\n", hcounter());
-            assert(0);
-        }
-    }
-    else
-    {
-        if (hcounter() != 0x10A)
-        {
-            printf("ERROR HCOUNTER32 %x\n", hcounter());
-            assert(0);
-        }
-    }
+    // if (mode_h40)
+    // {
+    //     if (hcounter() != 0x14A)
+    //     {
+    //         printf("ERROR HCOUNTER40 %x\n", hcounter());
+    //         assert(0);
+    //     }
+    // }
+    // else
+    // {
+    //     if (hcounter() != 0x10A)
+    //     {
+    //         printf("ERROR HCOUNTER32 %x\n", hcounter());
+    //         assert(0);
+    //     }
+    // }
 
     if (_vcounter < (VERSION_PAL ? 0xF0 : 0xE0))
     {
@@ -374,7 +430,8 @@ void VDP::scanline_hblank(uint8_t *screen)
             if (REG0_LINE_INTERRUPT)
             {
                 mem_log("VDP", "HINTERRUPT (_vcounter: %d, new counter: %d)\n", _vcounter, REG10_LINE_COUNTER);
-                CPU_M68K.irq(4);
+                if (!(status_reg & STATUS_DMAPROGRESS))
+                    CPU_M68K.irq(4);
             }
 
             line_counter_interrupt = REG10_LINE_COUNTER;
@@ -397,7 +454,8 @@ void VDP::scanline_end(uint8_t* screen)
     if (status_reg & STATUS_VIRQPENDING)   // vblank begin
     {
         if (REG1_VBLANK_INTERRUPT)
-            CPU_M68K.irq(6);
+            if (!(status_reg & STATUS_DMAPROGRESS))
+                CPU_M68K.irq(6);
         CPU_Z80.set_irq_line(true);
 
         status_reg &= ~STATUS_VIRQPENDING;
@@ -411,10 +469,15 @@ void VDP::scanline_end(uint8_t* screen)
 
 unsigned int VDP::scanline_hblank_clocks(void)
 {
+    // This value is required because the M68K is too slow, and sometimes
+    // instructions take too long to complete. We don't want to generate
+    // HINT too late otherwise programs don't have time to process it.
+    enum { TOLERANCE=0 };
+
     if (mode_h40)
-        return ((0x14B - 0xD) * VDP_CYCLES_PER_LINE + 420/2) / 420;
+        return ((0x14B - 0xD - TOLERANCE) * VDP_CYCLES_PER_LINE + 420/2) / 420;
     else
-        return ((0x10A - 0xB) * VDP_CYCLES_PER_LINE + 342/2) / 342;
+        return ((0x10A - 0xB - TOLERANCE) * VDP_CYCLES_PER_LINE + 342/2) / 342;
 }
 
 unsigned int VDP::num_scanlines(void)
@@ -427,31 +490,37 @@ unsigned int VDP::num_scanlines(void)
  * DMA
  **************************************************************/
 
-void VDP::dma_trigger()
+int PCDMA_DEBUG = 0;
+
+void VDP::dma_start()
 {
-    // Check master DMA enable, otherwise skip
-    if (!REG1_DMA_ENABLED)
+    if (REG23_DMA_TYPE == 2)
+    {
+        // VRAM fill will trigger on next data port write
+        dma_fill_pending = true;
+        return;
+    }
+
+    PCDMA_DEBUG = CPU_M68K.PC();
+    status_reg |= STATUS_DMAPROGRESS;
+    dma_poll();
+}
+
+void VDP::dma_poll()
+{
+    if (!(status_reg & STATUS_DMAPROGRESS))
         return;
 
     switch (REG23_DMA_TYPE)
     {
-        case 0:
-        case 1:
-            dma_m68k();
-            break;
-
-        case 2:
-            // VRAM fill will trigger on next data port write
-            dma_fill_pending = true;
-            break;
-
-        case 3:
-            dma_copy();
-            break;
+        case 0: dma_m68k(); break;
+        case 1: dma_m68k(); break;
+        case 2: dma_fill(); break;
+        case 3: dma_copy(); break;
     }
 }
 
-void VDP::dma_fill(uint16_t value)
+void VDP::dma_fill()
 {
     /* FIXME: should be done in parallel and non blocking */
     int length = REG19_DMA_LENGTH;
@@ -469,9 +538,9 @@ void VDP::dma_fill(uint16_t value)
     {
     case 0x1:
         mem_log("VDP", "DMA VRAM fill: address:%04x, increment:%04x, length:%x, value: %04x\n",
-            address_reg, REG15_DMA_INCREMENT, length, value);
+            address_reg, REG15_DMA_INCREMENT, length, fifo[0]);
         do {
-            VRAM[(address_reg ^ 1) & 0xFFFF] = value >> 8;
+            VRAM[(address_reg ^ 1) & 0xFFFF] = fifo[0] >> 8;
             address_reg += REG15_DMA_INCREMENT;
             src_addr_low++;
         } while (--length);
@@ -491,7 +560,8 @@ void VDP::dma_fill(uint16_t value)
         } while (--length);
         break;
     default:
-        mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
+        mem_err("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
+        assert(0);
     }
 
     // Clear DMA length at the end of transfer
@@ -500,6 +570,8 @@ void VDP::dma_fill(uint16_t value)
     // Update DMA source address after end of transfer
     regs[21] = src_addr_low & 0xFF;
     regs[22] = src_addr_low >> 8;
+
+    status_reg &= ~STATUS_DMAPROGRESS;
 }
 
 void VDP::dma_m68k()
@@ -512,42 +584,59 @@ void VDP::dma_m68k()
     if (length == 0)
         length = 0xFFFF;
 
-    mem_log("VDP", "(V=%x,H=%x) DMA M68k->%s copy: src:%04x, dst:%04x, length:%d, increment:%d\n",
-        vcounter(), hcounter(),
+    uint64_t endline = (CPU_M68K.clock() / VDP_CYCLES_PER_LINE + 1) * VDP_CYCLES_PER_LINE;
+
+    mem_log("VDP", "(V=%x,H=%x)(clock=%lld, end=%lld) DMA M68k->%s copy: src:%04x, dst:%04x, length:%d, increment:%d\n",
+        vcounter(), hcounter(), CPU_M68K.clock(), endline,
         (code_reg&0xF)==1 ? "VRAM" : ( (code_reg&0xF)==3 ? "CRAM" : "VSRAM"),
         (src_addr_high | src_addr_low) << 1, address_reg, length, REG15_DMA_INCREMENT);
 
+
     do {
         unsigned int value = m68k_read_memory_16((src_addr_high | src_addr_low) << 1);
-        push_fifo(value);
 
         switch (code_reg & 0xF) {
             case 0x1:
+                push_fifo(value, 2);
                 VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
                 VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
                 break;
             case 0x3:
+                push_fifo(value, 1);
                 CRAM[(address_reg >> 1) & 0x3F] = value;
                 break;
             case 0x5:
+                push_fifo(value, 1);
                 VSRAM[(address_reg >> 1) & 0x3F] = value;
                 break;
             default:
-                mem_log("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
+                mem_err("VDP", "invalid code_reg:%x during DMA M68K\n", code_reg);
+                assert(0);
                 break;
         }
 
         address_reg += REG15_DMA_INCREMENT;
         src_addr_low += 1;
 
-    } while (--length);
+    } while (--length); // && CPU_M68K.clock() < endline);
 
     // Update DMA source address after end of transfer
     regs[21] = src_addr_low & 0xFF;
     regs[22] = src_addr_low >> 8;
 
-    // Clear DMA length at the end of transfer
-    regs[19] = regs[20] = 0;
+    // Update DMA length
+    regs[19] = length & 0xFF;
+    regs[20] = length >> 8;
+
+    if (!length)
+    {
+        status_reg &= ~STATUS_DMAPROGRESS;
+        if (PCDMA_DEBUG != CPU_M68K.PC())
+        {
+            mem_err("VDP", "PCDMA DEBUG:%x ACTUAL:%x\n", PCDMA_DEBUG, CPU_M68K.PC());
+            assert(0);
+        }
+    }
 }
 
 void VDP::dma_copy()
@@ -573,6 +662,7 @@ void VDP::dma_copy()
     // Clear DMA length at the end of transfer
     regs[19] = regs[20] = 0;
 
+    status_reg &= ~STATUS_DMAPROGRESS;
 }
 
 int VDP::get_nametable_A() { return REG2_NAMETABLE_A; }

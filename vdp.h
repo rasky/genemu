@@ -20,6 +20,7 @@ private:
     uint16_t VSRAM[0x40];  // only 40 words are really used
     uint8_t regs[0x20];
     uint16_t fifo[4];
+    uint64_t fifoclock[4];
     uint16_t address_reg;
     uint8_t code_reg;
     uint16_t status_reg;
@@ -36,12 +37,18 @@ private:
 private:
     void register_w(int reg, uint8_t value);
     int hcounter();   // 9-bit accurate horizontal
-    int vcounter();   // 8-bit accurate vcounter
-    void dma_trigger();
-    void dma_fill(uint16_t value);
+    int vcounter();   // 9-bit accurate vcounter
+    bool hblank();
+    bool vblank();
+    void dma_start();
+    void dma_poll();
+    void dma_fill();
     void dma_copy();
     void dma_m68k();
-    void push_fifo(uint16_t value);
+
+    bool fifo_empty();
+    bool fifo_full();
+    void push_fifo(uint16_t value, int numbytes);
 
     int get_nametable_A();
     int get_nametable_B();
