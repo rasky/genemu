@@ -7,11 +7,14 @@ extern "C" {
 class CpuM68K
 {
     uint64_t _clock;
+    int _delta;
 
 public:
     void init();
     void reset();
     void run(uint64_t target_cycles);
+    void burn(uint64_t target_cycles);
+    bool running(void);
     void irq(int level);
     uint64_t clock();
     unsigned int PC() { return m68k_get_reg(0, M68K_REG_PC); }

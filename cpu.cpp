@@ -11,23 +11,58 @@ CpuZ80 CPU_Z80;
 void CpuM68K::init(void)
 {
     _clock = 0;
+    _delta = 0;
     m68k_init();
     m68k_set_cpu_type(M68K_CPU_TYPE_68000);
 }
 
 void CpuM68K::run(uint64_t target)
 {
+    if (target <= _clock)
+        return;
+
+    int cycles = (target - (_clock+_delta)) / M68K_FREQ_DIVISOR;
     ::activecpu = 0;
-    //mem_log("M68K", "Running %d cycles (from %ld to %ld)\n", (target - m68k_clock) / M68K_FREQ_DIVISOR, m68k_clock, target);
-    m68k_execute((target - _clock) / M68K_FREQ_DIVISOR);
-    _clock = target;
+    assert(!BIT(VDP.status_register_r(), 1));   // 68k->VRAM DMA should never be in progress
+    _delta = m68k_execute(cycles) - cycles;
+    if (_clock < target)
+        _clock = target;
+}
+
+bool CpuM68K::running()
+{
+    return m68k_cycles_remaining() > 0;
 }
 
 uint64_t CpuM68K::clock(void)
 {
-    if (m68k_cycles_remaining() > 0)
+    if (running())
         return _clock + m68k_cycles_run() * M68K_FREQ_DIVISOR;
     return _clock;
+}
+
+void CpuM68K::burn(uint64_t target)
+{
+    uint64_t now = clock();
+    if (running() && target > now)
+    {
+        int rem = m68k_cycles_remaining();
+        int run = m68k_cycles_run();
+        int delta = (target - now) / M68K_FREQ_DIVISOR;
+        mem_log("CPU", "Burning from %lld to %lld (delta: %d, run: %d, rem: %d)\n",
+            now, target, delta, run, rem);
+        m68k_modify_timeslice(-delta);
+        assert(m68k_cycles_remaining() == rem-delta);
+        assert(m68k_cycles_run() == run+delta);
+    }
+    else
+    {
+        int rem = m68k_cycles_remaining();
+        int run = m68k_cycles_run();
+        mem_log("CPU", "Idle Burning from %lld to %lld (delta: %d, run: %d, rem: %d)\n",
+                    now, target, run, rem);
+        _clock = target;
+    }
 }
 
 void CpuM68K::reset(void)

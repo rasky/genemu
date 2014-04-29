@@ -709,7 +709,6 @@ int m68k_cycles_remaining(void)
 /* Change the timeslice */
 void m68k_modify_timeslice(int cycles)
 {
-	m68ki_initial_cycles += cycles;
 	ADD_CYCLES(cycles);
 }
 
