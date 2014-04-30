@@ -30,7 +30,7 @@ unsigned int backup_ram_r16(unsigned int address)
 {
     address &= 0xFFFF;
     if (backup_ram_enabled && address < 0x4000)
-        assert(!"r16 access to backup RAM");
+        return (BACKUP_RAM[address] << 8) | BACKUP_RAM[address+1];
     return (backup_ram_shadow[address] << 8) | backup_ram_shadow[address+1];
 }
 
