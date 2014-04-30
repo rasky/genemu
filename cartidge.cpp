@@ -139,7 +139,7 @@ void cartidge_init(void)
         fprintf(stderr, "RAM definition: start:%06x end:%06x\n",
             m68k_read_memory_32(0x1b4), m68k_read_memory_32(0x1b8));
 
-    if (memchr(region, 'E', sizeof(region)))
+    if (memchr(region, 'E', sizeof(region)) || memchr(region, '8', sizeof(region)))
     {
         VERSION_OVERSEA = 1;
         VERSION_PAL = 1;
