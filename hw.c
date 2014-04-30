@@ -36,7 +36,7 @@ void hw_init(void)
 #if 1
     screen = SDL_CreateWindow("Genemu - Sega Genesis Emulator",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        320*ZOOM, 224*ZOOM, 0);
+        320*ZOOM, 224*ZOOM, SDL_WINDOW_RESIZABLE);
     renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_PRESENTVSYNC);
 #else
     SDL_CreateWindowAndRenderer(320*ZOOM, 224*ZOOM, SDL_WINDOW_RESIZABLE,
