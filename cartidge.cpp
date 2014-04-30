@@ -93,6 +93,13 @@ void ssf2_bankswitch_w8(unsigned int address, unsigned int value)
     case 0xA130FB: base = 0x28; break;
     case 0xA130FD: base = 0x30; break;
     case 0xA130FF: base = 0x38; break;
+    case 0xA130F1:
+        if (backup_ram_enabled)
+        {
+            backup_ram_switch_w8(address, value);
+            return;
+        }
+        /* fallthrough */
     default:
         io_mem_w8(address, value);
         return;
@@ -155,17 +162,18 @@ void cartidge_init(void)
         VERSION_PAL = 0;
     }
 
-    // Map cartidge-specific hardware
-    if (memcmp(code, "GM MK-12056", 10) == 0)
-    {
-        // Super Street Fighter 2
-        m68k_memtable[0xA1] = MEMFUN_PAIR(&SSF2_BANKSWITCH);
-        return;
-    }
     if (memcmp(code, "GM MK-1079 ", 10) == 0 ||   // Sonic3
-        memcmp(code, "GM MK-1304 ", 10) == 0)     // Warriors of the sun
+        memcmp(code, "GM MK-1304 ", 10) == 0 ||   // Warriors of the sun
+        memcmp(code, "GM MK-1354 ", 10) == 0)     // Story of thor
     {
         mem_log("CARTIDGE", "Backup RAM\n");
         backup_ram_init();
+    }
+
+    // Bankswitcher
+    if (memcmp(code, "GM MK-12056", 10) == 0 ||   // Super Street Fighter 2
+        memcmp(code, "GM MK-1354 ", 10) == 0)     // Story of thor
+    {
+        m68k_memtable[0xA1] = MEMFUN_PAIR(&SSF2_BANKSWITCH);
     }
 }
