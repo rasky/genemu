@@ -175,7 +175,7 @@ static void io_mem_w8(unsigned int address, unsigned int value)
         return;
     }
 
-    mem_log("MEM", "write8 to I/O area %04x: %04x\n", address, value);
+    mem_err("MEM", "write8 to I/O area %04x: %04x\n", address, value);
 }
 static void io_mem_w16(unsigned int address, unsigned int value)
 {
