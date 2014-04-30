@@ -4,6 +4,7 @@
  **************************************/
 
 uint8_t *backup_ram_shadow;
+bool backup_ram_present;
 bool backup_ram_enabled;
 uint8_t BACKUP_RAM[0x2000];
 
@@ -57,6 +58,7 @@ static memfunc_pair BACKUP_RAM_SWITCH = {
 
 void backup_ram_init(void)
 {
+    backup_ram_present = true;
     backup_ram_enabled = true;
     backup_ram_shadow = (uint8_t*)m68k_memtable[0x20];
     m68k_memtable[0x20] = MEMFUN_PAIR(&BACKUP_RAM_ACCESS);
@@ -94,7 +96,7 @@ void ssf2_bankswitch_w8(unsigned int address, unsigned int value)
     case 0xA130FD: base = 0x30; break;
     case 0xA130FF: base = 0x38; break;
     case 0xA130F1:
-        if (backup_ram_enabled)
+        if (backup_ram_present)
         {
             backup_ram_switch_w8(address, value);
             return;
