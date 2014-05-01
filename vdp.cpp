@@ -22,7 +22,7 @@ extern int framecounter;
 #define REG3_NAMETABLE_W      (BITS(regs[3], 1, 5) << 11)
 #define REG4_NAMETABLE_B      (BITS(regs[4], 0, 3) << 13)
 #define REG10_LINE_COUNTER    BITS(regs[10], 0, 8)
-#define REG12_MODE_H40        BIT(regs[12], 7)
+#define REG12_MODE_H40        BIT(regs[12], 0)
 #define REG15_DMA_INCREMENT   regs[15]
 #define REG19_DMA_LENGTH      (regs[19] | (regs[20] << 8))
 #define REG21_DMA_SRCADDR_LOW (regs[21] | (regs[22] << 8))
