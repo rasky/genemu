@@ -21,15 +21,19 @@ private:
     void draw_pattern(uint8_t *screen, uint16_t name, int paty, bool is_sprite);
     void draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty);
     void draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t hs, uint16_t *vsram);
+    void draw_plane_a(uint8_t *screen, int y);
+    void draw_plane_b(uint8_t *screen, int y);
     void draw_plane_w(uint8_t *screen, int y);
-    void draw_tiles(uint8_t *screen, int line);
+    // void draw_tiles(uint8_t *screen, int line);
     void draw_sprites(uint8_t *screen, int line);
 
-    void get_hscroll(int line, int *hscroll_a, int *hscroll_b);
+    uint8_t* get_hscroll_vram(int line);
+    inline bool in_window(int x, int y);
+    uint8_t mix(int x, int y, uint8_t back, uint8_t b, uint8_t a, uint8_t s);
 
 private:
-    uint8_t* get_offscreen_buffer();
-    void mix_offscreen_buffer(uint8_t *screen, uint8_t *buffer, int x, int width);
+    // uint8_t* get_offscreen_buffer();
+    // void mix_offscreen_buffer(uint8_t *screen, uint8_t *buffer, int x, int width);
 
 public:
     int screen_offset() { return (SCREEN_WIDTH - screen_width()) / 2; }
@@ -73,7 +77,9 @@ void FORCE_INLINE GFX::draw_pixel(uint8_t *screen, uint8_t rgb, uint8_t attrs, i
     case DRAW_ALWAYS:
         break;
     case DRAW_NOT_ON_SPRITE:
-        if (*screen & PIXATTR_SPRITE)
+        // if ((rgb & 0xF) == 0)
+        //     return;
+        if (*screen & 0xF)
             return;
         break;
     case DRAW_MAX_PRIORITY:
@@ -97,8 +103,8 @@ void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t palette, uint8
         uint8_t pix1 = !fliph ? pix>>4 : pix&0xF;
         uint8_t pix2 = !fliph ? pix&0xF : pix>>4;
 
-        if (pix1) draw_pixel(screen+0, palette | pix1, attrs, draw_command);
-        if (pix2) draw_pixel(screen+1, palette | pix2, attrs, draw_command);
+        draw_pixel(screen+0, palette | pix1, attrs, draw_command);
+        draw_pixel(screen+1, palette | pix2, attrs, draw_command);
 
         if (fliph)
             pattern--;
@@ -140,7 +146,7 @@ void GFX::draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty)
 {
     for (int i = 0; i < numcols; ++i)
     {
-        draw_pattern<DRAW_MAX_PRIORITY>(screen, (nt[0] << 8) | nt[1], paty, false);
+        draw_pattern<DRAW_ALWAYS>(screen, (nt[0] << 8) | nt[1], paty, false);
         nt += 2;
         screen += 8;
     }
@@ -191,7 +197,7 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx,
         uint8_t paty = scrolly & 7;
         uint8_t *nt = VDP.VRAM + ntaddr + row*(2*ntwidth);
 
-        draw_pattern<DRAW_MAX_PRIORITY>(screen, (nt[col*2] << 8) | nt[col*2+1], paty, false);
+        draw_pattern<DRAW_ALWAYS>(screen, (nt[col*2] << 8) | nt[col*2+1], paty, false);
 
         col = (col + 1) & ntw_mask;
         screen += 8;
@@ -219,9 +225,9 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     const int MAX_PIXELS_PER_LINE   = (screen_width() == 320) ? 320 : 256;
 
 #if 0
-    if (line == 66)
+    if (line == 220)
     {
-        sidx = 0;
+        int sidx = 0;
         for (int i = 0; i < 64; ++i)
         {
             uint8_t *table = start_table + sidx*8;
@@ -233,9 +239,10 @@ void GFX::draw_sprites(uint8_t *screen, int line)
             int sw = BITS(table[2], 2, 2) + 1;
             int sx = ((table[6] & 0x3) << 8) | table[7];
             int link = BITS(table[3], 0, 7);
+            int pat_idx = BITS(name, 0, 11);
 
-            mem_log("SPRITE", "%d (sx:%d, sy:%d sz:%d,%d, name:%04x, link:%02x)\n",
-                    sidx, sx, sy, sw*8, sh*8, name, link);
+            mem_log("SPRITE", "%d (sx:%d, sy:%d sz:%d,%d, name:%04x, link:%02x, VRAM:%04x)\n",
+                    sidx, sx, sy, sw*8, sh*8, name, link, pat_idx*32);
 
             if (link == 0) break;
             sidx = link;
@@ -314,7 +321,7 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     }
 }
 
-void GFX::get_hscroll(int line, int *hscroll_a, int *hscroll_b)
+uint8_t *GFX::get_hscroll_vram(int line)
 {
     int table_offset = VDP.regs[13] & 0x3F;
     int mode = VDP.regs[11] & 3;
@@ -337,10 +344,10 @@ void GFX::get_hscroll(int line, int *hscroll_a, int *hscroll_b)
         break;
     }
 
-    *hscroll_a = FETCH16(table + idx*4 + 0) & 0x3FF;
-    *hscroll_b = FETCH16(table + idx*4 + 2) & 0x3FF;
+    return table + idx*4;
 }
 
+#if 0
 uint8_t *GFX::get_offscreen_buffer(void)
 {
     enum { PIX_OVERFLOW = 32 };
@@ -362,12 +369,27 @@ void GFX::mix_offscreen_buffer(uint8_t *screen, uint8_t *buffer, int x, int w)
         screen++;
     }
 }
+#endif
 
+void GFX::draw_plane_a(uint8_t *screen, int line)
+{
+    if (keystate[SDL_SCANCODE_A]) return;
+    uint16_t hsa = FETCH16(get_hscroll_vram(line) + 0) & 0x3FF;
+    draw_plane_ab(screen, line, VDP.get_nametable_A(), hsa, VDP.VSRAM);
+}
 
+void GFX::draw_plane_b(uint8_t *screen, int line)
+{
+    if (keystate[SDL_SCANCODE_B]) return;
+    uint16_t hsb = FETCH16(get_hscroll_vram(line) + 2) & 0x3FF;
+    draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, VDP.VSRAM+1);
+}
+
+#if 0
 void GFX::draw_tiles(uint8_t *screen, int line)
 {
 
-#if 0
+#if 1
     if (line == 0) {
         int winh = VDP.regs[17] & 0x1F;
         int winhright = VDP.regs[17] >> 7;
@@ -445,6 +467,62 @@ void GFX::draw_tiles(uint8_t *screen, int line)
         mix_offscreen_buffer(screen, buffer, wx, ww);
     }
 }
+#endif
+
+
+#define SHI_NORMAL(x)        ((x) | 0x80)
+#define SHI_HIGHLIGHT(x)     ((x) | 0x40)
+#define SHI_SHADOW(x)        ((x) & 0x3F)
+
+#define SHI_IS_SHADOW(x)     (!((x) & 0x80))
+#define SHI_IS_HIGHLIGHT(x)  ((x) & 0x40)
+
+uint8_t GFX::mix(int x, int y, uint8_t back, uint8_t b, uint8_t a, uint8_t s)
+{
+    s &= ~0x40; // FIXME - simplify inner drawing code and remove IS_SPRITE per-pixel flag
+
+    uint8_t tile = 0;
+
+    if (b & 0xF)
+        tile = b;
+    if ((a & 0xF) && (tile & 0x80) <= (a & 0x80))
+        tile = a;
+    if ((s & 0xF) && (tile & 0x80) <= (s & 0x80))
+    {
+        if (MODE_SHI)
+            switch (s & 0x3F) {
+                case 0x0E:
+                case 0x1E:
+                case 0x2E: return SHI_NORMAL(s);         // draw sprite, normal
+                case 0x3E: return SHI_HIGHLIGHT(tile);   // draw tile, force highlight
+                case 0x3F: return SHI_SHADOW(tile);      // draw tile, force shadow
+            }
+        return s;
+    }
+
+    if (MODE_SHI)
+        tile |= (b|a) & 0x80;
+    return tile;
+}
+
+inline bool GFX::in_window(int x, int y)
+{
+    if (keystate[SDL_SCANCODE_W]) return false;
+
+    int winv = (VDP.regs[18] & 0x1F) * 8;
+    bool winvdown = BIT(VDP.regs[18], 7);
+
+    if (winvdown && y >= winv) return true;
+    if (!winvdown && y < winv) return true;
+
+    int winh = (VDP.regs[17] & 0x1F) * 16;
+    bool winhright = BIT(VDP.regs[17], 7);
+
+    if (winhright && x >= winh) return true;
+    if (!winhright && x < winh) return true;
+
+    return false;
+}
 
 void GFX::render_scanline(uint8_t *screen, int line)
 {
@@ -452,8 +530,7 @@ void GFX::render_scanline(uint8_t *screen, int line)
     // wasting time and code in clipping. The maximum object is a 4x4 sprite,
     // so 32 pixels (on both side) is enough.
     enum { PIX_OVERFLOW = 32 };
-    uint8_t tile_buffer[SCREEN_WIDTH + PIX_OVERFLOW*2];
-    uint8_t sprite_buffer[SCREEN_WIDTH + PIX_OVERFLOW*2];
+    uint8_t buffer[4][SCREEN_WIDTH + PIX_OVERFLOW*2];
 
     if (BITS(VDP.regs[12], 1, 2) != 0)
         assert(!"interlace mode");
@@ -461,23 +538,67 @@ void GFX::render_scanline(uint8_t *screen, int line)
     if (line >= 224)
         return;
 
+#if 1
+    if (line == 0) {
+        int winh = VDP.regs[17] & 0x1F;
+        int winhright = VDP.regs[17] >> 7;
+        int winv = VDP.regs[18] & 0x1F;
+        int winvdown = VDP.regs[18] >> 7;
+        int addr_a = VDP.get_nametable_A();
+        int addr_b = VDP.get_nametable_B();
+        int addr_w = VDP.get_nametable_W();
+        mem_log("GFX", "A(addr:%04x) B(addr:%04x) W(addr:%04x) SPR(addr:%04x)\n", addr_a, addr_b, addr_w, ((VDP.regs[5] & 0x7F) << 9));
+        mem_log("GFX", "W(h:%d, right:%d, v:%d, down:%d\n)", winh, winhright, winv, winvdown);
+        mem_log("GFX", "SCROLL: %04x %04x\n", VDP.VSRAM[0], VDP.VSRAM[1]);
+
+        FILE *f;
+        f=fopen("vram.dmp", "wb");
+        fwrite(VDP.VRAM, 1, 65536, f);
+        fclose(f);
+        f=fopen("cram.dmp", "wb");
+        fwrite(VDP.CRAM, 1, 64*2, f);
+        fclose(f);
+        f=fopen("vsram.dmp", "wb");
+        fwrite(VDP.VSRAM, 1, 64*2, f);
+        fclose(f);
+    }
+#endif
+
+
     // Display enable
     memset(screen, 0, SCREEN_WIDTH);
     if (BIT(VDP.regs[0], 0))
         return;
 
-    uint8_t *src1 = tile_buffer+PIX_OVERFLOW;
-    uint8_t *src2 = sprite_buffer+PIX_OVERFLOW;
-    uint16_t backdrop_color = VDP.CRAM[BITS(VDP.regs[7], 0, 6)];
+    // Gfx enable
+    bool enable = BIT(VDP.regs[1], 6);
 
-    memset(src1, 0, SCREEN_WIDTH);
-    memset(src2, 0, SCREEN_WIDTH);
+    memset(buffer, 0, sizeof(buffer));
 
-    draw_tiles(src1, line);
-    draw_sprites(src2, line);
+    uint16_t back = BITS(VDP.regs[7], 0, 6);
+    uint8_t *pb = &buffer[0][PIX_OVERFLOW];
+    uint8_t *pa = &buffer[1][PIX_OVERFLOW];
+    uint8_t *pw = &buffer[2][PIX_OVERFLOW];
+    uint8_t *ps = &buffer[3][PIX_OVERFLOW];
+
+    draw_plane_b(pb+screen_offset(), line);
+    draw_plane_a(pa+screen_offset(), line);
+    draw_plane_w(pw+screen_offset(), line);
+    draw_sprites(ps+screen_offset(), line);
 
     for (int i=0; i<SCREEN_WIDTH; ++i)
     {
+        uint8_t pix = back;
+
+        if (enable && i >= screen_offset() && i < screen_offset() + screen_width())
+        {
+            uint8_t *aw = in_window(i, line) ? pw : pa;
+            pix = mix(i, line, back, pb[i], aw[i], ps[i]);
+            if ((pix & 0xF) == 0)
+                pix = back;
+        }
+
+#if 0
         if (i < screen_offset() || i >= screen_offset() + screen_width())
         {
             *screen++ = CRAM_R(backdrop_color);
@@ -520,6 +641,7 @@ void GFX::render_scanline(uint8_t *screen, int line)
             if (MODE_SHI)
                 shadow = !(pix & PIXATTR_HIPRI);
         }
+#endif
 
         uint8_t index = pix & 0x3F;
         uint16_t rgb = VDP.CRAM[index];
@@ -529,11 +651,11 @@ void GFX::render_scanline(uint8_t *screen, int line)
         uint8_t b = CRAM_B(rgb);
 
 #if 1
-        if (!keystate[SDL_SCANCODE_H])
+        if (!keystate[SDL_SCANCODE_H] && MODE_SHI)
         {
-            if (highlight)
+            if (SHI_IS_HIGHLIGHT(pix))
                 HIGHLIGHT_COLOR(r,g,b);
-            else if (shadow)
+            else if (SHI_IS_SHADOW(pix))
                 SHADOW_COLOR(r,g,b);
         }
 #endif
