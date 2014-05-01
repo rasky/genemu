@@ -53,7 +53,21 @@ public:
 #define HIGHLIGHT_COLOR(r,g,b) \
     do { SHADOW_COLOR(r,g,b); r |= 0x80; g |= 0x80; b |= 0x80; } while(0)
 
-#define PIXATTR_HIPRI      0x80
+// While we draw the planes, we use bit 0x80 on each pixel to save the
+// high-priority flag, so that we can later prioritize.
+#define PIXATTR_HIPRI        0x80
+
+// After mixing code, we use free bits 0x80 and 0x40 to indicate the
+// shadow/highlight effect to apply on each pixel. Notice that we use
+// 0x80 to indicate normal drawing and 0x00 to indicate shadowing,
+// which does match exactly the semantic of PIXATTR_HIPRI. This simplifies
+// mixing code quite a bit.
+#define SHI_NORMAL(x)        ((x) | 0x80)
+#define SHI_HIGHLIGHT(x)     ((x) | 0x40)
+#define SHI_SHADOW(x)        ((x) & 0x3F)
+
+#define SHI_IS_SHADOW(x)     (!((x) & 0x80))
+#define SHI_IS_HIGHLIGHT(x)  ((x) & 0x40)
 
 template <bool fliph>
 void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs)
@@ -67,6 +81,8 @@ void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs)
         uint8_t pix1 = !fliph ? pix>>4 : pix&0xF;
         uint8_t pix2 = !fliph ? pix&0xF : pix>>4;
 
+        // Never overwrite already-written bytes. This is only
+        // useful for sprites; within each plane, we never overdraw anyway.
         if ((screen[0] & 0xF) == 0)
             screen[0] = attrs | pix1;
         if ((screen[1] & 0xF) == 0)
@@ -317,18 +333,8 @@ void GFX::draw_plane_b(uint8_t *screen, int line)
     draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, VDP.VSRAM+1);
 }
 
-
-#define SHI_NORMAL(x)        ((x) | 0x80)
-#define SHI_HIGHLIGHT(x)     ((x) | 0x40)
-#define SHI_SHADOW(x)        ((x) & 0x3F)
-
-#define SHI_IS_SHADOW(x)     (!((x) & 0x80))
-#define SHI_IS_HIGHLIGHT(x)  ((x) & 0x40)
-
 uint8_t GFX::mix(int x, int y, uint8_t back, uint8_t b, uint8_t a, uint8_t s)
 {
-    s &= ~0x40; // FIXME - simplify inner drawing code and remove IS_SPRITE per-pixel flag
-
     uint8_t tile = 0;
 
     if (b & 0xF)
