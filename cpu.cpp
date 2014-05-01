@@ -24,21 +24,29 @@ void CpuM68K::run(uint64_t target)
     ::activecpu = 0;
     _running = true;
     // mem_log("M68K", "Begin timeslice at %lld to reach %lld\n", clock(), target);
-    m68k_execute((target + M68K_FREQ_DIVISOR - 1) / M68K_FREQ_DIVISOR);
+    m68k_execute(target / M68K_FREQ_DIVISOR);
+    if (target >= m68k_clock() * M68K_FREQ_DIVISOR)
+    {
+        _delta = target - m68k_clock() * M68K_FREQ_DIVISOR;
+        assert(_delta >= 0);
+        assert(_delta < M68K_FREQ_DIVISOR);
+    }
     // mem_log("M68K", "End timeslice at %lld (delta: %d)\n", clock(), _delta);
     _running = false;
 }
 
 uint64_t CpuM68K::clock(void)
 {
-    return m68k_clock() * M68K_FREQ_DIVISOR;
+    return m68k_clock() * M68K_FREQ_DIVISOR + _delta;
 }
 
 void CpuM68K::burn(uint64_t target)
 {
-    int cycles = (target - clock() + M68K_FREQ_DIVISOR - 1) / M68K_FREQ_DIVISOR;
+    int cycles = (target - m68k_clock() * M68K_FREQ_DIVISOR) / M68K_FREQ_DIVISOR;
     mem_log("M68K", "Burning %d cycles at %lld to reach %lld\n", cycles*M68K_FREQ_DIVISOR, clock(), target);
     m68k_burn_timeslice(cycles);
+    assert(target >= m68k_clock() * M68K_FREQ_DIVISOR);
+    _delta = target - m68k_clock() * M68K_FREQ_DIVISOR;
     // mem_log("M68K","After Burning: %lld\n", clock());
 }
 
