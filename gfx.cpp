@@ -14,26 +14,18 @@ extern "C" {
 class GFX
 {
 private:
-    void draw_pixel(uint8_t *screen, uint8_t rgb, uint8_t attrs, int draw_command);
-    template <bool fliph, int draw_command>
-    void draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t palette, uint8_t attrs);
-    template <int draw_command>
-    void draw_pattern(uint8_t *screen, uint16_t name, int paty, bool is_sprite);
-    void draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty);
+    template <bool fliph>
+    void draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs);
+    void draw_pattern(uint8_t *screen, uint16_t name, int paty);
     void draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t hs, uint16_t *vsram);
     void draw_plane_a(uint8_t *screen, int y);
     void draw_plane_b(uint8_t *screen, int y);
     void draw_plane_w(uint8_t *screen, int y);
-    // void draw_tiles(uint8_t *screen, int line);
     void draw_sprites(uint8_t *screen, int line);
 
     uint8_t* get_hscroll_vram(int line);
     inline bool in_window(int x, int y);
     uint8_t mix(int x, int y, uint8_t back, uint8_t b, uint8_t a, uint8_t s);
-
-private:
-    // uint8_t* get_offscreen_buffer();
-    // void mix_offscreen_buffer(uint8_t *screen, uint8_t *buffer, int x, int width);
 
 public:
     int screen_offset() { return (SCREEN_WIDTH - screen_width()) / 2; }
@@ -61,38 +53,10 @@ public:
 #define HIGHLIGHT_COLOR(r,g,b) \
     do { SHADOW_COLOR(r,g,b); r |= 0x80; g |= 0x80; b |= 0x80; } while(0)
 
-// True if the pixel is coming from a sprite (needed in shadow/highlight mode)
-#define PIXATTR_SPRITE     (1 << 6)
-// True if the pixel is marked as high-priority (for mixing purposes)
-#define PIXATTR_HIPRI      (1 << 7)
+#define PIXATTR_HIPRI      0x80
 
-
-void FORCE_INLINE GFX::draw_pixel(uint8_t *screen, uint8_t rgb, uint8_t attrs, int draw_command)
-{
-    assert(rgb < 0x40);
-    assert((attrs & 0x3F) == 0);
-
-    switch (draw_command)
-    {
-    case DRAW_ALWAYS:
-        break;
-    case DRAW_NOT_ON_SPRITE:
-        // if ((rgb & 0xF) == 0)
-        //     return;
-        if (*screen & 0xF)
-            return;
-        break;
-    case DRAW_MAX_PRIORITY:
-        if ((attrs & PIXATTR_HIPRI) < (*screen & PIXATTR_HIPRI))
-            return;
-        break;
-    }
-
-    *screen = rgb | attrs;
-}
-
-template <bool fliph, int draw_command>
-void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t palette, uint8_t attrs)
+template <bool fliph>
+void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs)
 {
     if (fliph)
         pattern += 3;
@@ -103,8 +67,10 @@ void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t palette, uint8
         uint8_t pix1 = !fliph ? pix>>4 : pix&0xF;
         uint8_t pix2 = !fliph ? pix&0xF : pix>>4;
 
-        draw_pixel(screen+0, palette | pix1, attrs, draw_command);
-        draw_pixel(screen+1, palette | pix2, attrs, draw_command);
+        if ((screen[0] & 0xF) == 0)
+            screen[0] = attrs | pix1;
+        if ((screen[1] & 0xF) == 0)
+            screen[1] = attrs | pix2;
 
         if (fliph)
             pattern--;
@@ -115,8 +81,7 @@ void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t palette, uint8
 }
 
 
-template <int draw_command>
-void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty, bool is_sprite)
+void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty)
 {
     int pat_idx = BITS(name, 0, 11);
     int pat_fliph = BITS(name, 11, 1);
@@ -124,11 +89,7 @@ void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty, bool is_sprite)
     int pat_palette = BITS(name, 13, 2);
     int pat_pri = BITS(name, 15, 1);
     uint8_t *pattern = VDP.VRAM + pat_idx * 32;
-    uint8_t palette = pat_palette * 16;
-
-    uint8_t attrs = 0;
-    if (pat_pri) attrs |= PIXATTR_HIPRI;
-    if (is_sprite) attrs |= PIXATTR_SPRITE;
+    uint8_t attrs = (pat_palette << 4) | (pat_pri ? PIXATTR_HIPRI : 0);
 
     if (!pat_flipv)
         pattern += paty*4;
@@ -136,20 +97,9 @@ void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty, bool is_sprite)
         pattern += (7-paty)*4;
 
     if (!pat_fliph)
-        draw_pattern<false, draw_command>(screen, pattern, palette, attrs);
+        draw_pattern<false>(screen, pattern, attrs);
     else
-        draw_pattern<true, draw_command>(screen, pattern, palette, attrs);
-}
-
-
-void GFX::draw_nametable(uint8_t *screen, uint8_t *nt, int numcols, int paty)
-{
-    for (int i = 0; i < numcols; ++i)
-    {
-        draw_pattern<DRAW_ALWAYS>(screen, (nt[0] << 8) | nt[1], paty, false);
-        nt += 2;
-        screen += 8;
-    }
+        draw_pattern<true>(screen, pattern, attrs);
 }
 
 void GFX::draw_plane_w(uint8_t *screen, int y)
@@ -158,8 +108,14 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
     int row = y >> 3;
     int paty = y & 7;
     uint16_t ntwidth = (screen_width() == 320 ? 64 : 32);
+    uint8_t *nt = VDP.VRAM + addr_w + row*2*ntwidth;
 
-    draw_nametable(screen, VDP.VRAM + addr_w + row*2*ntwidth, screen_width()/8, paty);
+    for (int i = 0; i < screen_width() / 8; ++i)
+    {
+        draw_pattern(screen, FETCH16(nt), paty);
+        nt += 2;
+        screen += 8;
+    }
 }
 
 void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx, uint16_t *vsram)
@@ -197,7 +153,7 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx,
         uint8_t paty = scrolly & 7;
         uint8_t *nt = VDP.VRAM + ntaddr + row*(2*ntwidth);
 
-        draw_pattern<DRAW_ALWAYS>(screen, (nt[col*2] << 8) | nt[col*2+1], paty, false);
+        draw_pattern(screen, FETCH16(nt + col*2), paty);
 
         col = (col + 1) & ntw_mask;
         screen += 8;
@@ -296,7 +252,7 @@ void GFX::draw_sprites(uint8_t *screen, int line)
                     name += sh*(sw-1);
                 for (int p=0;p<sw && num_pixels < MAX_PIXELS_PER_LINE;p++)
                 {
-                    draw_pattern<DRAW_NOT_ON_SPRITE>(screen + sx + p*8, name, paty, true);
+                    draw_pattern(screen + sx + p*8, name, paty);
                     if (!fliph)
                         name += sh;
                     else
