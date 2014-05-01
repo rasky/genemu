@@ -33,6 +33,14 @@ private:
     int sprite_overflow;
     int mode_h40;
     int mode_v40;
+    bool dma_m68k_running;
+    int access_slot_freq;
+    uint64_t base_access_slot;
+    uint64_t base_access_slot_time;
+
+    uint64_t access_slot_at(uint64_t when);
+    uint64_t access_slot_time(uint64_t numslot);
+    void update_access_slot_freq(void);
 
 private:
     void register_w(int reg, uint8_t value);
@@ -48,6 +56,8 @@ private:
 
     bool fifo_empty();
     bool fifo_full();
+    void fifo_wait_empty();
+    void fifo_wait_not_full();
     void push_fifo(uint16_t value, int numbytes);
 
     int get_nametable_A();
@@ -61,6 +71,7 @@ public:
     void scanline_hblank(uint8_t *screen);
     void scanline_end(uint8_t *screen);
     void frame_end();
+    bool is_dma_m68k_running() { return dma_m68k_running; }
 
     unsigned int scanline_hblank_clocks();
     unsigned int num_scanlines();

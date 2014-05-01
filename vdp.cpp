@@ -133,6 +133,10 @@ void VDP::register_w(int reg, uint8_t value)
             else if (!REG0_HVLATCH && hvcounter_latched)
                 hvcounter_latched = false;
             break;
+
+        case 1:
+            update_access_slot_freq();
+            break;
     }
 
 }
@@ -148,35 +152,104 @@ static const int fifo_delay[2][2] =
 bool VDP::fifo_empty()
 {
     uint64_t now = CPU_M68K.clock();
-    return now >= fifoclock[0];
+    return now >= access_slot_time(fifoclock[0]);
 }
 
 bool VDP::fifo_full()
 {
     uint64_t now = CPU_M68K.clock();
-    return now < fifoclock[3];
+    return now < access_slot_time(fifoclock[3]);
+}
+
+void VDP::fifo_wait_empty()
+{
+    if (!fifo_empty())
+        CPU_M68K.burn(access_slot_time(fifoclock[0]));
+    assert(fifo_empty());
+    assert(!fifo_full());
+}
+
+void VDP::fifo_wait_not_full()
+{
+    if (fifo_full())
+        CPU_M68K.burn(access_slot_time(fifoclock[3]));
+    assert(!fifo_full());
+}
+
+#define MAX(a,b)  ((a)>(b)?(a):(b))
+#define PIXELRATE_TO_CLOCKS_F8(n)  ((VDP_CYCLES_PER_LINE << 8) / (n))
+
+void VDP::update_access_slot_freq()
+{
+    uint64_t cur_slot = access_slot_at(CPU_M68K.clock());
+
+    mem_log("VDP", "before update asfreq: cur_slot:%lld, clock:%lld, base_access_slot_time:%lld, base_access_slot:%lld\n",
+        cur_slot, CPU_M68K.clock(), base_access_slot_time, base_access_slot);
+
+    base_access_slot_time = access_slot_time(cur_slot);
+    base_access_slot = cur_slot;
+    access_slot_freq = PIXELRATE_TO_CLOCKS_F8(fifo_delay[mode_h40][vblank()]);
+
+    mem_log("VDP", "after update asfreq: cur_slot:%lld, clock:%lld, base_access_slot_time:%lld, base_access_slot:%lld\n",
+        access_slot_at(CPU_M68K.clock()), CPU_M68K.clock(), base_access_slot_time, base_access_slot);
+
+    if (access_slot_at(CPU_M68K.clock()) < cur_slot)
+    {
+        printf("ERROR update asfreq: prev_slot:%lld, new_slot:%lld\n", cur_slot,
+            access_slot_at(CPU_M68K.clock()));
+        assert(0);
+    }
+    // assert(curslot == access_slot_at(CPU_M68K.clock()));
+    // mem_log("VDP", "Update AS freq: num:%lld, basetime:%lld, freq:%d(%f)\n",
+    //     base_access_slot, base_access_slot_time,
+    //     access_slot_freq, float(access_slot_freq) / 256.0);
+}
+
+uint64_t VDP::access_slot_time(uint64_t numslot)
+{
+    int64_t s = numslot - base_access_slot;   // NOTE: might become negative
+    return ((s * access_slot_freq) >> 8) + base_access_slot_time;
+}
+
+uint64_t VDP::access_slot_at(uint64_t when)
+{
+    when -= base_access_slot_time;
+    return ((when << 8) + 255) / access_slot_freq + base_access_slot;
 }
 
 void VDP::push_fifo(uint16_t value, int numbytes)
 {
-    #define MAX(a,b)  ((a)>(b)?(a):(b))
-    #define PIXELRATE_TO_CLOCKS(n)  (VDP_CYCLES_PER_LINE / (n))
+    assert(numbytes > 0);
 
     fifo[3] = fifo[2];
     fifo[2] = fifo[1];
     fifo[1] = fifo[0];
     fifo[0] = value;
 
-    uint64_t now = CPU_M68K.clock();
-    uint64_t end = MAX(fifoclock[0], now) + PIXELRATE_TO_CLOCKS(fifo_delay[mode_h40][vblank()] / numbytes);
-    if (fifoclock[3] > now)
+    uint64_t cur_slot = access_slot_at(CPU_M68K.clock()+15*7);
+    // printf("Checking fifo: now:%lld(%lld), f3:%lld(%lld), as_freq:%f\n",
+    //     CPU_M68K.clock(), cur_slot,
+    //     access_slot_time(fifoclock[3]), fifoclock[3],
+    //     float(access_slot_freq) / 256.0);
+
+    if (fifoclock[3] > cur_slot)
     {
-        //CPU_M68K.burn(fifoclock[3]);
+        mem_log("VDP", "FIFO burn (slot %lld -> %lld)\n", cur_slot, fifoclock[3]);
+        CPU_M68K.burn(access_slot_time(fifoclock[3]));
+        assert(access_slot_at(CPU_M68K.clock()) == fifoclock[3]);
+        cur_slot = fifoclock[3];
     }
+
+    cur_slot = MAX(fifoclock[0], cur_slot);
     fifoclock[3] = fifoclock[2];
     fifoclock[2] = fifoclock[1];
     fifoclock[1] = fifoclock[0];
-    fifoclock[0] = end;
+    fifoclock[0] = cur_slot+numbytes;
+    // printf("push_fifo f0:%lld(%lld) f1:%lld(%lld) f2:%lld(%lld) f3:%lld(%lld)\n",
+    //     access_slot_time(fifoclock[0]), fifoclock[0],
+    //     access_slot_time(fifoclock[1]), fifoclock[1],
+    //     access_slot_time(fifoclock[2]), fifoclock[2],
+    //     access_slot_time(fifoclock[3]), fifoclock[3]);
 }
 
 void VDP::data_port_w16(uint16_t value)
@@ -243,6 +316,8 @@ uint16_t VDP::data_port_r16(void)
     command_word_pending = false;
     mem_log("VDP", "data port r16: code:%x, addr:%x\n", code_reg, address_reg);
 
+    fifo_wait_empty();
+
     switch (code_reg & 0xF)
     {
     case 0x0:
@@ -286,10 +361,19 @@ uint16_t VDP::data_port_r16(void)
 
 }
 
+static bool buslocked = false;
+static uint16_t buslockw = 0;
 
 void VDP::control_port_w(uint16_t value)
 {
-    assert(!(status_reg & STATUS_DMAPROGRESS));
+    if (dma_m68k_running)
+    {
+        mem_log("VDP", "writing to control port during DMA, buslocked\n");
+        assert(!buslocked);
+        buslocked = true;
+        buslockw = value;
+        return;
+    }
 
     if (command_word_pending) {
         // second half of the command word
@@ -298,7 +382,7 @@ void VDP::control_port_w(uint16_t value)
         address_reg &= 0x3FFF;
         address_reg |= value << 14;
         command_word_pending = false;
-        fprintf(stdout, "[VDP][PC=%06x](%04d) command word 2nd: code:%02x addr:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg, address_reg);
+        mem_log("VDP", "command word 2nd: code:%02x addr:%04x (clock=%lld)\n", code_reg, address_reg, CPU_M68K.clock());
         if ((code_reg & (1<<5)) && REG1_DMA_ENABLED)
             dma_start();
         return;
@@ -317,7 +401,7 @@ void VDP::control_port_w(uint16_t value)
     address_reg &= ~0x3FFF;
     address_reg |= value & 0x3FFF;
     command_word_pending = true;
-    fprintf(stdout, "[VDP][PC=%06x](%04d) command word 1st: code:%02x addr:%04x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg, address_reg);
+    mem_log("VDP", "command word 1st: code:%02x addr:%04x (clock=%lld)\n", code_reg, address_reg, CPU_M68K.clock());
 }
 
 uint16_t VDP::status_register_r(void)
@@ -345,6 +429,9 @@ uint16_t VDP::status_register_r(void)
     status &= 0x3FF;
     status |= m68k_read_memory_16(CPU_M68K.PC() & 0xFFFFFF) & 0xFC00;
 
+    mem_log("VDP", "Status read (fifo full:%d empty:%d, status:%02x)\n",
+        bool(status & STATUS_FIFO_FULL), bool(status & STATUS_FIFO_EMPTY), status & 0x302);
+
     // reading the status clears the pending flag for command words
     command_word_pending = false;
 
@@ -361,7 +448,7 @@ uint16_t VDP::hvcounter_r16(void)
     assert(vc < 512);
     assert(hc < 512);
 
-    mem_log("VDP", "VCounter read: %x\n", vc);
+    mem_log("VDP", "HVCounter read: vc=%x, hc=%x, value=%x\n", vc, hc, ((vc & 0xFF) << 8) | (hc >> 1));
 
     return ((vc & 0xFF) << 8) | (hc >> 1);
 }
@@ -369,6 +456,7 @@ uint16_t VDP::hvcounter_r16(void)
 void VDP::frame_begin(void)
 {
     mode_v40 = REG1_PAL;
+    update_access_slot_freq();
 }
 
 void VDP::frame_end(void) {}
@@ -430,8 +518,8 @@ void VDP::scanline_hblank(uint8_t *screen)
             if (REG0_LINE_INTERRUPT)
             {
                 mem_log("VDP", "HINTERRUPT (_vcounter: %d, new counter: %d)\n", _vcounter, REG10_LINE_COUNTER);
-                if (!(status_reg & STATUS_DMAPROGRESS))
-                    CPU_M68K.irq(4);
+                // if (!dma_m68k_running)
+                CPU_M68K.irq(4);
             }
 
             line_counter_interrupt = REG10_LINE_COUNTER;
@@ -443,10 +531,13 @@ void VDP::scanline_hblank(uint8_t *screen)
     {
         _vcounter = 0;
         sprite_overflow = 0;
+        update_access_slot_freq();
     }
 
     if (_vcounter == (VERSION_PAL ? 0xF0 : 0xE0))
+    {
         status_reg |= STATUS_VIRQPENDING;
+    }
 }
 
 void VDP::scanline_end(uint8_t* screen)
@@ -454,8 +545,8 @@ void VDP::scanline_end(uint8_t* screen)
     if (status_reg & STATUS_VIRQPENDING)   // vblank begin
     {
         if (REG1_VBLANK_INTERRUPT)
-            if (!(status_reg & STATUS_DMAPROGRESS))
-                CPU_M68K.irq(6);
+            // if (!dma_m68k_running)
+            CPU_M68K.irq(6);
         CPU_Z80.set_irq_line(true);
 
         status_reg &= ~STATUS_VIRQPENDING;
@@ -561,7 +652,7 @@ void VDP::dma_fill()
         break;
     default:
         mem_err("VDP", "invalid code_reg:%x during DMA fill\n", code_reg);
-        assert(0);
+        // assert(0);
     }
 
     // Clear DMA length at the end of transfer
@@ -586,11 +677,12 @@ void VDP::dma_m68k()
 
     uint64_t endline = (CPU_M68K.clock() / VDP_CYCLES_PER_LINE + 1) * VDP_CYCLES_PER_LINE;
 
-    mem_log("VDP", "(V=%x,H=%x)(clock=%lld, end=%lld) DMA M68k->%s copy: src:%04x, dst:%04x, length:%d, increment:%d\n",
-        vcounter(), hcounter(), CPU_M68K.clock(), endline,
+    mem_log("VDP", "(V=%x,H=%x)(clock=%lld, end=%lld, vblank=%d) DMA M68k->%s copy: src:%04x, dst:%04x, length:%d, increment:%d\n",
+        vcounter(), hcounter(), CPU_M68K.clock(), endline, vblank(),
         (code_reg&0xF)==1 ? "VRAM" : ( (code_reg&0xF)==3 ? "CRAM" : "VSRAM"),
         (src_addr_high | src_addr_low) << 1, address_reg, length, REG15_DMA_INCREMENT);
 
+    dma_m68k_running = true;
 
     do {
         unsigned int value = m68k_read_memory_16((src_addr_high | src_addr_low) << 1);
@@ -618,7 +710,7 @@ void VDP::dma_m68k()
         address_reg += REG15_DMA_INCREMENT;
         src_addr_low += 1;
 
-    } while (--length); // && CPU_M68K.clock() < endline);
+    } while (--length && CPU_M68K.clock() < endline);
 
     // Update DMA source address after end of transfer
     regs[21] = src_addr_low & 0xFF;
@@ -630,13 +722,24 @@ void VDP::dma_m68k()
 
     if (!length)
     {
+        mem_log("VDP", "DMA M68K finished\n");
+        dma_m68k_running = false;
         status_reg &= ~STATUS_DMAPROGRESS;
         if (PCDMA_DEBUG != CPU_M68K.PC())
         {
             mem_err("VDP", "PCDMA DEBUG:%x ACTUAL:%x\n", PCDMA_DEBUG, CPU_M68K.PC());
             assert(0);
         }
+
+        if (buslocked)
+        {
+            mem_log("VDP", "Flushing buslocked write: %04x\n", buslockw);
+            buslocked = false;
+            control_port_w(buslockw);
+        }
     }
+    else
+        mem_log("VDP", "DMA M68K interrupted (end of scanlined) (clock=%lld)\n", CPU_M68K.clock());
 }
 
 void VDP::dma_copy()
@@ -678,6 +781,10 @@ void VDP::reset()
     status_reg = 0x3C00;
     line_counter_interrupt = 0;
     hvcounter_latched = false;
+    base_access_slot = 0;
+    base_access_slot_time = 0;
+    access_slot_freq = 1;
+    update_access_slot_freq();
 }
 
 void vdp_mem_w8(unsigned int address, unsigned int value)

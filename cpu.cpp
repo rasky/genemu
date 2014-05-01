@@ -22,6 +22,7 @@ void CpuM68K::run(uint64_t target)
         return;
 
     ::activecpu = 0;
+    assert(!VDP.is_dma_m68k_running());   // 68k->VRAM DMA should never be in progress
     _running = true;
     // mem_log("M68K", "Begin timeslice at %lld to reach %lld\n", clock(), target);
     m68k_execute(target / M68K_FREQ_DIVISOR);
