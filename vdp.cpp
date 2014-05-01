@@ -226,7 +226,7 @@ void VDP::push_fifo(uint16_t value, int numbytes)
     fifo[1] = fifo[0];
     fifo[0] = value;
 
-    uint64_t cur_slot = access_slot_at(CPU_M68K.clock()+15*7);
+    uint64_t cur_slot = access_slot_at(CPU_M68K.clock());
     // printf("Checking fifo: now:%lld(%lld), f3:%lld(%lld), as_freq:%f\n",
     //     CPU_M68K.clock(), cur_slot,
     //     access_slot_time(fifoclock[3]), fifoclock[3],
@@ -787,6 +787,9 @@ void VDP::reset()
     update_access_slot_freq();
 }
 
+#define M68K_READ_DELAY    (15*7)
+#define M68K_WRITE_DELAY   (15*7)
+
 void vdp_mem_w8(unsigned int address, unsigned int value)
 {
     switch (address & 0x1F) {
@@ -806,6 +809,7 @@ void vdp_mem_w8(unsigned int address, unsigned int value)
 
 void vdp_mem_w16(unsigned int address, unsigned int value)
 {
+    CPU_M68K.burn(CPU_M68K.clock() + M68K_WRITE_DELAY);
     switch (address & 0x1F) {
         case 0x0:
         case 0x2: VDP.data_port_w16(value); return;
@@ -839,6 +843,7 @@ unsigned int vdp_mem_r16(unsigned int address)
 {
     unsigned int ret;
 
+    CPU_M68K.burn(CPU_M68K.clock() + M68K_READ_DELAY);
     switch (address & 0x1F) {
         case 0x0:
         case 0x2: return VDP.data_port_r16();
