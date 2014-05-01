@@ -583,6 +583,7 @@ bool mem_apply_gamegenie(char *gg)
     uint16_t value = (val0 << 8) | val1;
 
     fprintf(stderr, "GG code: %s (%06x:%04x)\n", gg, address, value);
-    m68k_write_memory_16(address, value);
+    ROM[address+0] = val0;
+    ROM[address+1] = val1;
     return true;
 }
