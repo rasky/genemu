@@ -348,7 +348,7 @@ void GFX::draw_plane_b(uint8_t *screen, int line)
 
 uint8_t GFX::mix(int x, int y, uint8_t back, uint8_t b, uint8_t a, uint8_t s)
 {
-    uint8_t tile = 0;
+    uint8_t tile = back;
 
     if (b & 0xF)
         tile = b;
@@ -462,7 +462,7 @@ void GFX::render_scanline(uint8_t *screen, int line)
 
     memset(buffer, 0, sizeof(buffer));
 
-    uint16_t back = BITS(VDP.regs[7], 0, 6);
+    uint8_t back = BITS(VDP.regs[7], 0, 6);
     uint8_t *pb = &buffer[0][PIX_OVERFLOW];
     uint8_t *pa = &buffer[1][PIX_OVERFLOW];
     uint8_t *pw = &buffer[2][PIX_OVERFLOW];
@@ -494,8 +494,6 @@ void GFX::render_scanline(uint8_t *screen, int line)
             {
                 uint8_t *aw = in_window(i, line) ? pw : pa;
                 pix = mix(i, line, back, pb[i], aw[i], ps[i]);
-                if ((pix & 0xF) == 0)
-                    pix = back;
             }
         }
 
