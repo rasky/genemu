@@ -10,7 +10,7 @@ CpuZ80 CPU_Z80;
 
 void CpuM68K::init(void)
 {
-    _clock = 0;
+    _running = false;
     _delta = 0;
     m68k_init();
     m68k_set_cpu_type(M68K_CPU_TYPE_68000);
@@ -18,51 +18,28 @@ void CpuM68K::init(void)
 
 void CpuM68K::run(uint64_t target)
 {
-    if (target <= _clock)
+    if (target <= clock())
         return;
 
-    int cycles = (target - (_clock+_delta)) / M68K_FREQ_DIVISOR;
     ::activecpu = 0;
-    assert(!BIT(VDP.status_register_r(), 1));   // 68k->VRAM DMA should never be in progress
-    _delta = m68k_execute(cycles) - cycles;
-    if (_clock < target)
-        _clock = target;
-}
-
-bool CpuM68K::running()
-{
-    return m68k_cycles_remaining() > 0;
+    _running = true;
+    // mem_log("M68K", "Begin timeslice at %lld to reach %lld\n", clock(), target);
+    m68k_execute((target + M68K_FREQ_DIVISOR - 1) / M68K_FREQ_DIVISOR);
+    // mem_log("M68K", "End timeslice at %lld (delta: %d)\n", clock(), _delta);
+    _running = false;
 }
 
 uint64_t CpuM68K::clock(void)
 {
-    if (running())
-        return _clock + m68k_cycles_run() * M68K_FREQ_DIVISOR;
-    return _clock;
+    return m68k_clock() * M68K_FREQ_DIVISOR;
 }
 
 void CpuM68K::burn(uint64_t target)
 {
-    uint64_t now = clock();
-    if (running() && target > now)
-    {
-        int rem = m68k_cycles_remaining();
-        int run = m68k_cycles_run();
-        int delta = (target - now) / M68K_FREQ_DIVISOR;
-        mem_log("CPU", "Burning from %lld to %lld (delta: %d, run: %d, rem: %d)\n",
-            now, target, delta, run, rem);
-        m68k_modify_timeslice(-delta);
-        assert(m68k_cycles_remaining() == rem-delta);
-        assert(m68k_cycles_run() == run+delta);
-    }
-    else
-    {
-        int rem = m68k_cycles_remaining();
-        int run = m68k_cycles_run();
-        mem_log("CPU", "Idle Burning from %lld to %lld (delta: %d, run: %d, rem: %d)\n",
-                    now, target, run, rem);
-        _clock = target;
-    }
+    int cycles = (target - clock() + M68K_FREQ_DIVISOR - 1) / M68K_FREQ_DIVISOR;
+    mem_log("M68K", "Burning %d cycles at %lld to reach %lld\n", cycles*M68K_FREQ_DIVISOR, clock(), target);
+    m68k_burn_timeslice(cycles);
+    // mem_log("M68K","After Burning: %lld\n", clock());
 }
 
 void CpuM68K::reset(void)

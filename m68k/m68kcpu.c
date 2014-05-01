@@ -45,8 +45,8 @@
 /* ================================= DATA ================================= */
 /* ======================================================================== */
 
-int  m68ki_initial_cycles;
-int  m68ki_remaining_cycles = 0;                     /* Number of clocks remaining */
+sint64 m68ki_clock;
+sint64 m68ki_clock_target;
 uint m68ki_tracing = 0;
 uint m68ki_address_space;
 
@@ -634,17 +634,17 @@ void m68k_set_cpu_type(unsigned int cpu_type)
 			return;
 	}
 }
+#include <assert.h>
 
 /* Execute some instructions until we use up num_cycles clock cycles */
 /* ASG: removed per-instruction interrupt checks */
-int m68k_execute(int num_cycles)
+void m68k_execute(uint64_t target)
 {
 	/* Make sure we're not stopped */
 	if(!CPU_STOPPED)
 	{
 		/* Set our pool of clock cycles available */
-		SET_CYCLES(num_cycles);
-		m68ki_initial_cycles = num_cycles;
+		SET_CYCLES(target - m68ki_clock);
 
 		/* ASG: update cycles */
 		USE_CYCLES(CPU_INT_CYCLES);
@@ -685,38 +685,30 @@ int m68k_execute(int num_cycles)
 		CPU_INT_CYCLES = 0;
 
 		/* return how many clocks we used */
-		return m68ki_initial_cycles - GET_CYCLES();
+		return;
 	}
 
 	/* We get here if the CPU is stopped or halted */
-	SET_CYCLES(0);
+	USE_ALL_CYCLES();
 	CPU_INT_CYCLES = 0;
-
-	return num_cycles;
-}
-
-
-int m68k_cycles_run(void)
-{
-	return m68ki_initial_cycles - GET_CYCLES();
-}
-
-int m68k_cycles_remaining(void)
-{
-	return GET_CYCLES();
 }
 
 /* Change the timeslice */
-void m68k_modify_timeslice(int cycles)
+void m68k_burn_timeslice(int cycles)
 {
-	ADD_CYCLES(cycles);
+	assert(cycles > 0);
+	USE_CYCLES(cycles);
 }
 
 
-void m68k_end_timeslice(void)
+void m68k_stop_timeslice(void)
 {
-	m68ki_initial_cycles = GET_CYCLES();
 	SET_CYCLES(0);
+}
+
+uint64_t m68k_clock(void)
+{
+	return m68ki_clock;
 }
 
 
@@ -754,6 +746,9 @@ void m68k_init(void)
 	m68k_set_pc_changed_callback(NULL);
 	m68k_set_fc_callback(NULL);
 	m68k_set_instr_hook_callback(NULL);
+
+	m68ki_clock = 0;
+	m68ki_clock_target = 0;
 }
 
 /* Pulse the RESET line on the CPU */

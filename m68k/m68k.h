@@ -285,18 +285,14 @@ void m68k_init(void);
  */
 void m68k_pulse_reset(void);
 
-/* execute num_cycles worth of instructions.  returns number of cycles used */
-int m68k_execute(int num_cycles);
-
-/* These functions let you read/write/modify the number of cycles left to run
- * while m68k_execute() is running.
- * These are useful if the 68k accesses a memory-mapped port on another device
- * that requires immediate processing by another CPU.
+/*
+ * rasky: I modified the core to keep a global absolute clock counter,
+ * which is much easier to handle for the case in which we want to burn cycles.
  */
-int m68k_cycles_run(void);              /* Number of cycles run so far */
-int m68k_cycles_remaining(void);        /* Number of cycles left */
-void m68k_modify_timeslice(int cycles); /* Modify cycles left */
-void m68k_end_timeslice(void);          /* End timeslice now */
+void m68k_execute(uint64_t target);
+void m68k_burn_timeslice(int cycles);   /* Burn some cycles (eg: memory waitstates) */
+void m68k_end_timeslice(void);          /* Abirt timeslice now, without changing the clock */
+uint64_t m68k_clock(void);
 
 /* Set the IPL0-IPL2 pins on the CPU (IRQ).
  * A transition from < 7 to 7 will cause a non-maskable interrupt (NMI).

@@ -33,6 +33,7 @@
 #ifndef M68KCPU__HEADER
 #define M68KCPU__HEADER
 
+#include <stdint.h>
 #include "m68k.h"
 #include <limits.h>
 
@@ -63,12 +64,12 @@
 #undef sint
 #undef uint
 
-#define sint8  signed   char			/* ASG: changed from char to signed char */
-#define sint16 signed   short
-#define sint32 signed   long
-#define uint8  unsigned char
-#define uint16 unsigned short
-#define uint32 unsigned long
+#define sint8  int8_t
+#define sint16 int16_t
+#define sint32 int32_t
+#define uint8  uint8_t
+#define uint16 uint16_t
+#define uint32 uint32_t
 
 /* signed and unsigned int must be at least 32 bits wide */
 #define sint   signed   int
@@ -76,11 +77,11 @@
 
 
 #if M68K_USE_64_BIT
-#define sint64 signed   long long
-#define uint64 unsigned long long
+#define sint64 int64_t
+#define uint64 uint64_t
 #else
-#define sint64 sint32
-#define uint64 uint32
+#define sint64 int32_t
+#define uint64 uint32_t
 #endif /* M68K_USE_64_BIT */
 
 
@@ -740,12 +741,12 @@
 
 
 /* ---------------------------- Cycle Counting ---------------------------- */
-
-#define ADD_CYCLES(A)    m68ki_remaining_cycles += (A)
-#define USE_CYCLES(A)    m68ki_remaining_cycles -= (A)
-#define SET_CYCLES(A)    m68ki_remaining_cycles = A
-#define GET_CYCLES()     m68ki_remaining_cycles
-#define USE_ALL_CYCLES() m68ki_remaining_cycles = 0
+#include <assert.h>
+#define ADD_CYCLES(A)    m68ki_clock_target += (A)
+#define USE_CYCLES(A)    m68ki_clock += (A)
+#define SET_CYCLES(A)    m68ki_clock_target = m68ki_clock + (A)
+#define GET_CYCLES()     m68ki_clock_target - m68ki_clock
+#define USE_ALL_CYCLES() m68ki_clock = m68ki_clock_target
 
 
 
@@ -825,15 +826,15 @@ typedef struct
 	uint run_mode;     /* Stores whether we are processing a reset, bus error, address error, or something else */
 
 	/* Clocks required for instructions / exceptions */
-	uint cyc_bcc_notake_b;
-	uint cyc_bcc_notake_w;
-	uint cyc_dbcc_f_noexp;
-	uint cyc_dbcc_f_exp;
-	uint cyc_scc_r_false;
-	uint cyc_movem_w;
-	uint cyc_movem_l;
-	uint cyc_shift;
-	uint cyc_reset;
+	sint cyc_bcc_notake_b;
+	sint cyc_bcc_notake_w;
+	sint cyc_dbcc_f_noexp;
+	sint cyc_dbcc_f_exp;
+	sint cyc_scc_r_false;
+	sint cyc_movem_w;
+	sint cyc_movem_l;
+	sint cyc_shift;
+	sint cyc_reset;
 	uint8* cyc_instruction;
 	uint8* cyc_exception;
 
@@ -849,7 +850,8 @@ typedef struct
 
 
 extern m68ki_cpu_core m68ki_cpu;
-extern sint           m68ki_remaining_cycles;
+extern sint64         m68ki_clock;
+extern sint64         m68ki_clock_target;
 extern uint           m68ki_tracing;
 extern uint8          m68ki_shift_8_table[];
 extern uint16         m68ki_shift_16_table[];
