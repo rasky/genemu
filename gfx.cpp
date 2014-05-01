@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <SDL.h>
 extern "C" {
+    #include "m68k/m68k.h"
     #include "hw.h"
 }
 #define SCREEN_WIDTH 320
@@ -22,6 +23,8 @@ private:
     void draw_plane_b(uint8_t *screen, int y);
     void draw_plane_w(uint8_t *screen, int y);
     void draw_sprites(uint8_t *screen, int line);
+
+    uint32_t HACK_check_dcolor_mode(void);
 
     uint8_t* get_hscroll_vram(int line);
     inline bool in_window(int x, int y);
@@ -378,6 +381,26 @@ inline bool GFX::in_window(int x, int y)
     return false;
 }
 
+uint32_t GFX::HACK_check_dcolor_mode()
+{
+    uint16_t back = BITS(VDP.regs[7], 0, 6);
+
+    // This is a HACK to implement a per-pixel effect called "Direct Color" mode
+    if ((VDP.status_reg & 2) &&                         // dma in progress
+        (BITS(VDP.regs[23], 6, 2) < 2) &&               // dma from m68k
+        (VDP.code_reg & 0xF) == 3 &&                    // to CRAM
+        (((VDP.address_reg >> 1) & 0x3F) == back) &&    // to backdrop color
+        (VDP.regs[15] == 0))                            // with increment=0
+    {
+        uint32_t src_addr_low = (VDP.regs[21] | (VDP.regs[22] << 8));
+        uint32_t src_addr_high = ((VDP.regs[23] & 0x7F) << 16);
+        return (src_addr_high | src_addr_low) << 1;
+    }
+
+    return 0;
+}
+
+
 void GFX::render_scanline(uint8_t *screen, int line)
 {
     // Overflow is the maximum size we can draw outside to avoid
@@ -425,7 +448,7 @@ void GFX::render_scanline(uint8_t *screen, int line)
         return;
 
     // Gfx enable
-    bool enable = BIT(VDP.regs[1], 6);
+    bool enable_planes = BIT(VDP.regs[1], 6);
 
     memset(buffer, 0, sizeof(buffer));
 
@@ -440,18 +463,31 @@ void GFX::render_scanline(uint8_t *screen, int line)
     draw_plane_w(pw+screen_offset(), line);
     draw_sprites(ps+screen_offset(), line);
 
+    // Detect special direct-color mode.
+    uint32_t dcolor_addr = HACK_check_dcolor_mode();
+    uint32_t dcolor_offset = 0;
+    uint32_t dcolor_step = (198 << 8) / screen_width();  /* FIXME */
+
     for (int i=0; i<SCREEN_WIDTH; ++i)
     {
         uint8_t pix = back;
 
-        if (enable && i >= screen_offset() && i < screen_offset() + screen_width())
+        if (i >= screen_offset() && i < screen_offset() + screen_width())
         {
-            uint8_t *aw = in_window(i, line) ? pw : pa;
-            pix = mix(i, line, back, pb[i], aw[i], ps[i]);
-            if ((pix & 0xF) == 0)
-                pix = back;
-        }
+            if (dcolor_addr)
+            {
+                VDP.CRAM[back&0x3F] = m68k_read_memory_16(dcolor_addr + (dcolor_offset>>8)*2);
+                dcolor_offset += dcolor_step;
+            }
 
+            if (enable_planes)
+            {
+                uint8_t *aw = in_window(i, line) ? pw : pa;
+                pix = mix(i, line, back, pb[i], aw[i], ps[i]);
+                if ((pix & 0xF) == 0)
+                    pix = back;
+            }
+        }
 
         uint8_t index = pix & 0x3F;
         uint16_t rgb = VDP.CRAM[index];
