@@ -347,30 +347,6 @@ uint8_t *GFX::get_hscroll_vram(int line)
     return table + idx*4;
 }
 
-#if 0
-uint8_t *GFX::get_offscreen_buffer(void)
-{
-    enum { PIX_OVERFLOW = 32 };
-    static uint8_t buffer[SCREEN_WIDTH + PIX_OVERFLOW*2];
-    memset(buffer, 0, sizeof(buffer));
-    return buffer + PIX_OVERFLOW;
-}
-
-void GFX::mix_offscreen_buffer(uint8_t *screen, uint8_t *buffer, int x, int w)
-{
-    screen += x;
-    buffer += x;
-
-    while (w--)
-    {
-        if ((*buffer & 0x3F) && (*buffer & PIXATTR_HIPRI) >= (*screen & PIXATTR_HIPRI))
-            *screen = *buffer;
-        buffer++;
-        screen++;
-    }
-}
-#endif
-
 void GFX::draw_plane_a(uint8_t *screen, int line)
 {
     if (keystate[SDL_SCANCODE_A]) return;
@@ -384,90 +360,6 @@ void GFX::draw_plane_b(uint8_t *screen, int line)
     uint16_t hsb = FETCH16(get_hscroll_vram(line) + 2) & 0x3FF;
     draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, VDP.VSRAM+1);
 }
-
-#if 0
-void GFX::draw_tiles(uint8_t *screen, int line)
-{
-
-#if 1
-    if (line == 0) {
-        int winh = VDP.regs[17] & 0x1F;
-        int winhright = VDP.regs[17] >> 7;
-        int winv = VDP.regs[18] & 0x1F;
-        int winvdown = VDP.regs[18] >> 7;
-        int addr_a = VDP.get_nametable_A();
-        int addr_b = VDP.get_nametable_B();
-        int addr_w = VDP.get_nametable_W();
-        mem_log("GFX", "A(addr:%04x) B(addr:%04x) W(addr:%04x) SPR(addr:%04x)\n", addr_a, addr_b, addr_w, ((VDP.regs[5] & 0x7F) << 9));
-        mem_log("GFX", "W(h:%d, right:%d, v:%d, down:%d\n)", winh, winhright, winv, winvdown);
-        mem_log("GFX", "SCROLL: %04x %04x\n", VDP.VSRAM[0], VDP.VSRAM[1]);
-
-        FILE *f;
-        f=fopen("vram.dmp", "wb");
-        fwrite(VDP.VRAM, 1, 65536, f);
-        fclose(f);
-        f=fopen("cram.dmp", "wb");
-        fwrite(VDP.CRAM, 1, 64*2, f);
-        fclose(f);
-        f=fopen("vsram.dmp", "wb");
-        fwrite(VDP.VSRAM, 1, 64*2, f);
-        fclose(f);
-    }
-#endif
-
-    uint16_t backdrop_color = BITS(VDP.regs[7], 0, 6);
-    for (int x=0;x<screen_width();x++)
-        draw_pixel(screen + x, backdrop_color, 0, DRAW_ALWAYS);
-
-    // Plane/sprite disable, show only backdrop
-    if (!BIT(VDP.regs[1], 6))
-        return;
-
-    int hsa, hsb;
-    get_hscroll(line, &hsa, &hsb);
-
-    int winh = VDP.regs[17] & 0x1F;
-    int winhright = VDP.regs[17] >> 7;
-    int winv = VDP.regs[18] & 0x1F;
-    int winvdown = VDP.regs[18] >> 7;
-    bool full_window, partial_window;
-
-    // Plane A or W
-    full_window = false;
-    if (winvdown && line >= winv*8)
-        full_window = true;
-    else if (!winvdown && line < winv*8)
-        full_window = true;
-    if (!full_window && winh*16 >= screen_width())
-        full_window = true;
-
-    // Plane B
-    if (!keystate[SDL_SCANCODE_B])
-        draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, VDP.VSRAM+1);
-
-    if (!full_window && !keystate[SDL_SCANCODE_A])
-    {
-        uint8_t *buffer = get_offscreen_buffer();
-        draw_plane_ab(buffer, line, VDP.get_nametable_A(), hsa, VDP.VSRAM);
-
-        int ax = (!winhright ? winh*16 : 0);
-        int aw = (!winhright ? screen_width() - winh*16 : winh*16);
-        mix_offscreen_buffer(screen, buffer, ax, aw);
-    }
-
-    if (full_window && !keystate[SDL_SCANCODE_W])
-        draw_plane_w(screen, line);
-    else if (!keystate[SDL_SCANCODE_W])
-    {
-        uint8_t *buffer = get_offscreen_buffer();
-        draw_plane_w(buffer, line);
-
-        int wx = (!winhright ? 0 : winh*16);
-        int ww = (!winhright ? winh*16 : screen_width() - winh*16);
-        mix_offscreen_buffer(screen, buffer, wx, ww);
-    }
-}
-#endif
 
 
 #define SHI_NORMAL(x)        ((x) | 0x80)
@@ -538,7 +430,7 @@ void GFX::render_scanline(uint8_t *screen, int line)
     if (line >= 224)
         return;
 
-#if 1
+#if 0
     if (line == 0) {
         int winh = VDP.regs[17] & 0x1F;
         int winhright = VDP.regs[17] >> 7;
@@ -598,50 +490,6 @@ void GFX::render_scanline(uint8_t *screen, int line)
                 pix = back;
         }
 
-#if 0
-        if (i < screen_offset() || i >= screen_offset() + screen_width())
-        {
-            *screen++ = CRAM_R(backdrop_color);
-            *screen++ = CRAM_G(backdrop_color);
-            *screen++ = CRAM_B(backdrop_color);
-            *screen++ = 0;
-            continue;
-        }
-
-        uint8_t pix;
-        uint8_t tpix = *src1++;
-        uint8_t spix = *src2++;
-        bool shadow = false, highlight = false;
-
-        if ((spix & 0x3F) && (tpix & PIXATTR_HIPRI) <= (spix & PIXATTR_HIPRI))
-        {
-            pix = spix;
-            if (MODE_SHI)
-            {
-                uint8_t index = spix & 0x3F;
-                if (index == 0x0E || index == 0x1E || index == 0x2E)
-                    /* VDP bug: these indices do nothing */ ;
-                else if (index == 0x3E)
-                {
-                    pix = tpix;
-                    highlight = true;
-                }
-                else if (index == 0x3F)
-                {
-                    pix = tpix;
-                    shadow = true;
-                }
-                else
-                    shadow = !(pix & PIXATTR_HIPRI);
-            }
-        }
-        else
-        {
-            pix = tpix;
-            if (MODE_SHI)
-                shadow = !(pix & PIXATTR_HIPRI);
-        }
-#endif
 
         uint8_t index = pix & 0x3F;
         uint16_t rgb = VDP.CRAM[index];
@@ -650,15 +498,14 @@ void GFX::render_scanline(uint8_t *screen, int line)
         uint8_t g = CRAM_G(rgb);
         uint8_t b = CRAM_B(rgb);
 
-#if 1
-        if (!keystate[SDL_SCANCODE_H] && MODE_SHI)
+        if (MODE_SHI && !keystate[SDL_SCANCODE_H])
         {
             if (SHI_IS_HIGHLIGHT(pix))
                 HIGHLIGHT_COLOR(r,g,b);
             else if (SHI_IS_SHADOW(pix))
                 SHADOW_COLOR(r,g,b);
         }
-#endif
+
         *screen++ = r;
         *screen++ = g;
         *screen++ = b;
