@@ -144,10 +144,6 @@ void cartidge_init(void)
     memcpy(region, &ROM[0x1F0], 0x10);
     fprintf(stderr, "Region: %s\n", region);
 
-    if (ROM[0x1B0] == 'R' && ROM[0x1B1] == 'A')
-        fprintf(stderr, "RAM definition: start:%06x end:%06x\n",
-            m68k_read_memory_32(0x1b4), m68k_read_memory_32(0x1b8));
-
     if (memchr(region, 'E', sizeof(region)) || memchr(region, '8', sizeof(region)))
     {
         VERSION_OVERSEA = 1;
@@ -164,6 +160,13 @@ void cartidge_init(void)
         VERSION_PAL = 0;
     }
 
+    if (ROM[0x1B0] == 'R' && ROM[0x1B1] == 'A')
+    {
+        fprintf(stderr, "RAM definition: start:%06x end:%06x\n",
+            m68k_read_memory_32(0x1b4), m68k_read_memory_32(0x1b8));
+        backup_ram_init();
+    }
+    else
     if (memcmp(code, "GM MK-1079 ", 10) == 0 ||   // Sonic3
         memcmp(code, "GM MK-1304 ", 10) == 0 ||   // Warriors of the sun
         memcmp(code, "GM MK-1354 ", 10) == 0)     // Story of thor
