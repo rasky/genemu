@@ -269,7 +269,11 @@ void ym2612_mem_w8(unsigned int address, unsigned int value)
 template<class TYPE>
 unsigned int m68k_read_memory(unsigned int address)
 {
-    assert((address >> 16) < 256);
+    if ((address >> 16) >= 256)
+    {
+        mem_err("MEM", "invalid memory access: %x\n", address);
+        assert(0);
+    }
     unsigned long t = (unsigned long)m68k_memtable[address >> 16];
     if (t) {
         if (!(t & 1)) {
@@ -284,6 +288,7 @@ unsigned int m68k_read_memory(unsigned int address)
         return GET_MEMFUNC_PAIR(t)->read8(address);
     }
     mem_err("MEM", "unknown read%ld at %06x\n", sizeof(TYPE)*8, address);
+    assert(0);
     return 0xFFFFFFFF & ((1L<<(sizeof(TYPE)*8)) - 1);
 }
 
@@ -297,6 +302,7 @@ void m68k_write_memory(unsigned int address, unsigned int value)
             if (t & 2)
             {
                 mem_err("MEM", "Writing to ROM: %06x <- %0*x\n", address, (int)sizeof(TYPE)*2, value);
+                //assert(0);
                 return;
             }
             t = (t & ~3) + (address & 0xFFFF);
