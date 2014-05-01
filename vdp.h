@@ -34,6 +34,7 @@ private:
     int mode_h40;
     int mode_v40;
     bool dma_m68k_running;
+    bool display_disabled_hblank;
     int access_slot_freq;
     uint64_t base_access_slot;
     uint64_t base_access_slot_time;

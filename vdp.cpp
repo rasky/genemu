@@ -112,6 +112,7 @@ void VDP::register_w(int reg, uint8_t value)
     // Mode4 is not emulated yet. Anyway, access to registers > 0xA is blocked.
     if (!BIT(regs[0x1], 2) && reg > 0xA) return;
 
+    uint8_t oldvalue = regs[reg];
     regs[reg] = value;
     fprintf(stdout, "[VDP][PC=%06x](%04d) reg:%02d <- %02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, reg, value);
 
@@ -135,7 +136,14 @@ void VDP::register_w(int reg, uint8_t value)
             break;
 
         case 1:
-            update_access_slot_freq();
+            if (BIT((oldvalue ^ value), 6))
+            {
+                // Change in display enable: update access slot frequency
+                update_access_slot_freq();
+
+                if (!REG1_DISP_ENABLED && hblank())
+                    display_disabled_hblank = true;
+            }
             break;
     }
 
@@ -495,6 +503,8 @@ void VDP::scanline_begin(uint8_t *screen)
 
     mem_log("VDP", "render scanline %d\n", _vcounter);
     gfx_render_scanline(screen, _vcounter);
+
+    display_disabled_hblank = false;
 }
 
 void VDP::scanline_hblank(uint8_t *screen)
@@ -791,6 +801,7 @@ void VDP::reset()
     base_access_slot = 0;
     base_access_slot_time = 0;
     access_slot_freq = 1;
+    display_disabled_hblank = false;
     update_access_slot_freq();
 }
 

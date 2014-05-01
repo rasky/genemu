@@ -195,9 +195,19 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     // This is both the size of the table as seen by the VDP
     // *and* the maximum number of sprites that are processed
     // (important in case of infinite loops in links).
-    const int SPRITE_TABLE_SIZE     = (screen_width() == 320) ?  80 :  64;
-    const int MAX_SPRITES_PER_LINE  = (screen_width() == 320) ?  20 :  16;
-    const int MAX_PIXELS_PER_LINE   = (screen_width() == 320) ? 320 : 256;
+    int SPRITE_TABLE_SIZE     = (screen_width() == 320) ?  80 :  64;
+    int MAX_SPRITES_PER_LINE  = (screen_width() == 320) ?  20 :  16;
+    int MAX_PIXELS_PER_LINE   = (screen_width() == 320) ? 320 : 256;
+
+    // Disabling display in hblank has side effects on sprites
+    // (mickeymania, overdrive)
+    if (VDP.display_disabled_hblank)
+    {
+        SPRITE_TABLE_SIZE /= 4;
+        MAX_SPRITES_PER_LINE /= 2;
+        MAX_PIXELS_PER_LINE /= 2;
+    }
+
 
 #if 0
     if (line == 220)
