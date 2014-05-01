@@ -148,7 +148,7 @@ static const int fifo_delay[2][2] =
 bool VDP::fifo_empty()
 {
     uint64_t now = CPU_M68K.clock();
-    return now > fifoclock[0];
+    return now >= fifoclock[0];
 }
 
 bool VDP::fifo_full()
