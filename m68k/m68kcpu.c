@@ -640,6 +640,8 @@ void m68k_set_cpu_type(unsigned int cpu_type)
 /* ASG: removed per-instruction interrupt checks */
 void m68k_execute(uint64_t target)
 {
+	uint64_t inst_end;
+
 	/* Make sure we're not stopped */
 	if(!CPU_STOPPED)
 	{
@@ -670,8 +672,10 @@ void m68k_execute(uint64_t target)
 
 			/* Read an instruction and call its handler */
 			REG_IR = m68ki_read_imm_16();
+			inst_end = m68ki_clock + CYC_INSTRUCTION[REG_IR];
 			m68ki_instruction_jump_table[REG_IR]();
-			USE_CYCLES(CYC_INSTRUCTION[REG_IR]);
+			if (m68ki_clock < inst_end)
+				m68ki_clock = inst_end;
 
 			/* Trace m68k_exception, if necessary */
 			m68ki_exception_if_trace(); /* auto-disable (see m68kcpu.h) */
@@ -696,7 +700,7 @@ void m68k_execute(uint64_t target)
 /* Change the timeslice */
 void m68k_burn_timeslice(int cycles)
 {
-	assert(cycles > 0);
+	assert(cycles >= 0);
 	USE_CYCLES(cycles);
 }
 
