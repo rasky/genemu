@@ -143,10 +143,15 @@ void VDP::register_w(int reg, uint8_t value)
 
 static const int fifo_delay[2][2] =
 {
+    // These timings are correct for CRAM and VSRAM
     /* MODE H32 */
-    { 16, 167 },
+    { 16, 161 },
     /* MODE H40 */
-    { 18, 205 },
+    { 18, 198 },
+
+    // For VRAM, timing should be something like:
+    // { 16, ??? },
+    // { 18, 205 },
 };
 
 bool VDP::fifo_empty()
