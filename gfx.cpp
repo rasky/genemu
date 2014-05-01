@@ -437,7 +437,7 @@ void GFX::render_scanline(uint8_t *screen, int line)
         return;
 
     // Gfx enable
-    bool enable = BIT(VDP.regs[1], 6);
+    bool enable_planes = BIT(VDP.regs[1], 6);
 
     memset(buffer, 0, sizeof(buffer));
 
@@ -456,10 +456,13 @@ void GFX::render_scanline(uint8_t *screen, int line)
     {
         uint8_t pix = back;
 
-        if (enable && i >= screen_offset() && i < screen_offset() + screen_width())
+        if (i >= screen_offset() && i < screen_offset() + screen_width())
         {
-            uint8_t *aw = in_window(i, line) ? pw : pa;
-            pix = mix(i, line, back, pb[i], aw[i], ps[i]);
+            if (enable_planes)
+            {
+                uint8_t *aw = in_window(i, line) ? pw : pa;
+                pix = mix(i, line, back, pb[i], aw[i], ps[i]);
+            }
         }
 
 
