@@ -531,11 +531,11 @@ void VDP::scanline_hblank(uint8_t *screen)
     {
         _vcounter = 0;
         sprite_overflow = 0;
-        update_access_slot_freq();
     }
 
     if (_vcounter == (VERSION_PAL ? 0xF0 : 0xE0))
     {
+        update_access_slot_freq();
         status_reg |= STATUS_VIRQPENDING;
     }
 }
