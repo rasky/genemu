@@ -23,6 +23,7 @@ What's emulated
  * Correct sprite priority vs bkg
  * Correct sprite overflow and masking
  * Wide resolution change (32 vs 40 cells)
+ * Shadow / highlight mode
  * FM sound (YM2612)
  * Basic HINTERRUPT emulation
  * Vertical cell scrolling through VSRAM
@@ -33,9 +34,8 @@ Todo list
 =========
 The following is a rough list of missing features or things to be fixed:
 
- * Shadow / highlight mode
  * Interlace mode
- * PAL resolution (40 cells)
+ * PAL resolution (V30)
  * SN7689 audio chip
  * Accurate timing for DMA
  * The infamous "window bug"
