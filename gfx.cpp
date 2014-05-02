@@ -8,15 +8,14 @@ extern "C" {
     #include "hw.h"
 }
 #define SCREEN_WIDTH 320
-#define MAX(a,b) ((a)>(b)?(a):(b))
-#define MIN(a,b) ((a)<(b)?(a):(b))
 
 class GFX
 {
 private:
     template <bool fliph>
-    void draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs);
-    void draw_pattern(uint8_t *screen, uint16_t name, int paty);
+    bool FORCE_INLINE draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs);
+    template <bool check_overdraw>
+    bool draw_pattern(uint8_t *screen, uint16_t name, int paty);
     void draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t hs, uint16_t *vsram);
     void draw_plane_a(uint8_t *screen, int y);
     void draw_plane_b(uint8_t *screen, int y);
@@ -34,8 +33,6 @@ public:
     void render_scanline(uint8_t *screen, int line);
 
 } GFX;
-
-#define FORCE_INLINE            __attribute__((always_inline))
 
 #define DRAW_ALWAYS             0    // draw all the pixels
 #define DRAW_NOT_ON_SPRITE      1    // draw only if the buffer doesn't contain a pixel from a sprite
@@ -70,8 +67,10 @@ public:
 #define SHI_IS_HIGHLIGHT(x)  ((x) & 0x40)
 
 template <bool fliph>
-void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs)
+bool GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs)
 {
+    bool overdraw = false;
+
     if (fliph)
         pattern += 3;
 
@@ -85,8 +84,12 @@ void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs)
         // useful for sprites; within each plane, we never overdraw anyway.
         if ((screen[0] & 0xF) == 0)
             screen[0] = attrs | pix1;
+        else
+            overdraw |= pix1 & 0xF;
         if ((screen[1] & 0xF) == 0)
             screen[1] = attrs | pix2;
+        else
+            overdraw |= pix2 & 0xF;
 
         if (fliph)
             pattern--;
@@ -94,10 +97,12 @@ void GFX::draw_pattern(uint8_t *screen, uint8_t *pattern, uint8_t attrs)
             pattern++;
         screen += 2;
     }
+
+    return overdraw;
 }
 
-
-void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty)
+template <bool check_overdraw>
+bool GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty)
 {
     int pat_idx = BITS(name, 0, 11);
     int pat_fliph = BITS(name, 11, 1);
@@ -106,6 +111,7 @@ void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty)
     int pat_pri = BITS(name, 15, 1);
     uint8_t *pattern = VDP.VRAM + pat_idx * 32;
     uint8_t attrs = (pat_palette << 4) | (pat_pri ? PIXATTR_HIPRI : 0);
+    bool overdraw = false;
 
     if (!pat_flipv)
         pattern += paty*4;
@@ -113,9 +119,12 @@ void GFX::draw_pattern(uint8_t *screen, uint16_t name, int paty)
         pattern += (7-paty)*4;
 
     if (!pat_fliph)
-        draw_pattern<false>(screen, pattern, attrs);
+        overdraw |= draw_pattern<false>(screen, pattern, attrs);
     else
-        draw_pattern<true>(screen, pattern, attrs);
+        overdraw |= draw_pattern<true>(screen, pattern, attrs);
+
+    if (!check_overdraw) overdraw=false;  // this is enough to let the optimizer take everything out
+    return overdraw;
 }
 
 void GFX::draw_plane_w(uint8_t *screen, int y)
@@ -128,7 +137,7 @@ void GFX::draw_plane_w(uint8_t *screen, int y)
 
     for (int i = 0; i < screen_width() / 8; ++i)
     {
-        draw_pattern(screen, FETCH16(nt), paty);
+        draw_pattern<false>(screen, FETCH16(nt), paty);
         nt += 2;
         screen += 8;
     }
@@ -169,7 +178,7 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx,
         uint8_t paty = scrolly & 7;
         uint8_t *nt = VDP.VRAM + ntaddr + row*(2*ntwidth);
 
-        draw_pattern(screen, FETCH16(nt + col*2), paty);
+        draw_pattern<false>(screen, FETCH16(nt + col*2), paty);
 
         col = (col + 1) & ntw_mask;
         screen += 8;
@@ -222,7 +231,7 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     }
 #endif
 
-    bool masking = false, one_sprite_nonzero = false;
+    bool masking = false, one_sprite_nonzero = false, overdraw = false;
     int sidx = 0, num_sprites = 0, num_pixels = 0;
     for (int i = 0; i < SPRITE_TABLE_SIZE && sidx < SPRITE_TABLE_SIZE; ++i)
     {
@@ -268,7 +277,7 @@ void GFX::draw_sprites(uint8_t *screen, int line)
                     name += sh*(sw-1);
                 for (int p=0;p<sw && num_pixels < MAX_PIXELS_PER_LINE;p++)
                 {
-                    draw_pattern(screen + sx + p*8, name, paty);
+                    overdraw |= draw_pattern<true>(screen + sx + p*8, name, paty);
                     if (!fliph)
                         name += sh;
                     else
@@ -291,6 +300,9 @@ void GFX::draw_sprites(uint8_t *screen, int line)
         if (link == 0) break;
         sidx = link;
     }
+
+    if (overdraw)
+        VDP.sprite_collision = true;
 }
 
 uint8_t *GFX::get_hscroll_vram(int line)

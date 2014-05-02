@@ -267,6 +267,8 @@ uint16_t VDP::status_register_r(void)
 
     if (sprite_overflow)
         status |= STATUS_SPRITEOVERFLOW;
+    if (sprite_collision)
+        status |= STATUS_SPRITECOLLISION;
 
     // reading the status clears the pending flag for command words
     command_word_pending = false;
@@ -298,6 +300,7 @@ void VDP::scanline(uint8_t* screen)
     {
         vcounter = 0;
         sprite_overflow = 0;
+        sprite_collision = false;
     }
 
     // On these linese, the line counter interrupt is reloaded

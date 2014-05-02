@@ -32,6 +32,7 @@ private:
     bool hvcounter_latched;
     uint16_t hvcounter_latch;
     int sprite_overflow;
+    bool sprite_collision;
 
 private:
     void register_w(int reg, uint8_t value);
