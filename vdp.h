@@ -31,6 +31,7 @@ private:
     bool hvcounter_latched;
     uint16_t hvcounter_latch;
     int sprite_overflow;
+    bool sprite_collision;
     int mode_h40;
     int mode_v40;
     bool dma_m68k_running;

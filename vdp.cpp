@@ -436,6 +436,8 @@ uint16_t VDP::status_register_r(void)
 
     if (sprite_overflow)
         status |= STATUS_SPRITEOVERFLOW;
+    if (sprite_collision)
+        status |= STATUS_SPRITECOLLISION;
     if (VERSION_PAL)
         status |= STATUS_PAL;
 
@@ -530,6 +532,7 @@ void VDP::scanline_hblank(uint8_t *screen)
     {
         _vcounter = 0;
         sprite_overflow = 0;
+        sprite_collision = false;
     }
 
     if (_vcounter == (VERSION_PAL ? 0xF0 : 0xE0))
