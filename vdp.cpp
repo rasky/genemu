@@ -525,21 +525,6 @@ void VDP::scanline_hblank(uint8_t *screen)
     //     }
     // }
 
-    if (_vcounter < (VERSION_PAL ? 0xF0 : 0xE0))
-    {
-        if (--line_counter_interrupt < 0)
-        {
-            if (REG0_LINE_INTERRUPT)
-            {
-                mem_log("VDP", "HINTERRUPT (_vcounter: %d, new counter: %d)\n", _vcounter, REG10_LINE_COUNTER);
-                if (!dma_m68k_running)
-                    CPU_M68K.irq(4);
-            }
-
-            line_counter_interrupt = REG10_LINE_COUNTER;
-        }
-    }
-
     _vcounter++;
     if (_vcounter == (VERSION_PAL ? 313 : 262))
     {
@@ -561,6 +546,26 @@ void VDP::scanline_hblank(uint8_t *screen)
         assert(!vblank() || !REG1_DISP_ENABLED);
         update_access_slot_freq();
     }
+
+    // Line counter is decremented before the start of line #0 up
+    // to before the start of the first non-visible line, so
+    // it's actually executed one time more per frame. This has been
+    // semi-verified by outrunners and gunstarheroes.
+    if (_vcounter <= (VERSION_PAL ? 0xF0 : 0xE0))
+    {
+        if (--line_counter_interrupt < 0)
+        {
+            if (REG0_LINE_INTERRUPT)
+            {
+                mem_log("VDP", "HINTERRUPT (_vcounter: %d, new counter: %d)\n", _vcounter, REG10_LINE_COUNTER);
+                if (!dma_m68k_running)
+                    CPU_M68K.irq(4);
+            }
+
+            line_counter_interrupt = REG10_LINE_COUNTER;
+        }
+    }
+
 }
 
 void VDP::scanline_end(uint8_t* screen)
@@ -589,7 +594,7 @@ unsigned int VDP::scanline_hblank_clocks(void)
     enum { TOLERANCE=0 };
 
     if (mode_h40)
-        return ((0x14B - 0xD - TOLERANCE) * VDP_CYCLES_PER_LINE + 420/2) / 420;
+        return ((0x14A - 0xD - TOLERANCE) * VDP_CYCLES_PER_LINE + 420/2) / 420;
     else
         return ((0x10A - 0xB - TOLERANCE) * VDP_CYCLES_PER_LINE + 342/2) / 342;
 }
