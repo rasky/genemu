@@ -206,7 +206,7 @@ void VDP::update_access_slot_freq()
     // mem_log("VDP", "after update asfreq: cur_slot:%lld, clock:%lld, base_access_slot_time:%lld, base_access_slot:%lld\n",
     //     access_slot_at(CPU_M68K.clock()), CPU_M68K.clock(), base_access_slot_time, base_access_slot);
 
-    assert(access_slot_at(CPU_M68K.clock()) < cur_slot);
+    assert(access_slot_at(CPU_M68K.clock()) >= cur_slot);
 
     // assert(curslot == access_slot_at(CPU_M68K.clock()));
     mem_log("VDP", "Update AS freq: num:%lld, basetime:%lld, freq:%d(%f), delay:%d\n",
@@ -469,7 +469,6 @@ uint16_t VDP::hvcounter_r16(void)
 void VDP::frame_begin(void)
 {
     mode_v40 = REG1_PAL;
-    update_access_slot_freq();
 }
 
 void VDP::frame_end(void) {}
@@ -550,8 +549,17 @@ void VDP::scanline_hblank(uint8_t *screen)
 
     if (_vcounter == (VERSION_PAL ? 0xF0 : 0xE0))
     {
+        // vblank flag 0->1 transition
+        assert(vblank());
         update_access_slot_freq();
         status_reg |= STATUS_VIRQPENDING;
+    }
+
+    if (_vcounter == (VERSION_PAL ? 312 : 261))
+    {
+        // vblank flag 1->0 transition
+        assert(!vblank() || !REG1_DISP_ENABLED);
+        update_access_slot_freq();
     }
 }
 
