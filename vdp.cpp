@@ -557,7 +557,7 @@ void VDP::scanline_hblank(uint8_t *screen)
         sprite_collision = false;
     }
 
-    if (_vcounter == (VERSION_PAL ? 0xF0 : 0xE0))
+    if (_vcounter == (mode_v40 ? 0xF0 : 0xE0))
     {
         // vblank flag 0->1 transition
         assert(vblank());
@@ -576,7 +576,7 @@ void VDP::scanline_hblank(uint8_t *screen)
     // to before the start of the first non-visible line, so
     // it's actually executed one time more per frame. This has been
     // semi-verified by outrunners and gunstarheroes.
-    if (_vcounter <= (VERSION_PAL ? 0xF0 : 0xE0))
+    if (_vcounter <= (mode_v40 ? 0xF0 : 0xE0))
     {
         if (--line_counter_interrupt < 0)
         {
