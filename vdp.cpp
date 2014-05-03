@@ -168,8 +168,9 @@ static const int fifo_delay[2][2] =
     { 18, 198 },
 
     // For VRAM, timing should be something like:
-    // { 16, ??? },
+    // { 16, 167 },
     // { 18, 205 },
+    // see: http://gendev.spritesmind.net/forum/viewtopic.php?p=12079#12079
 };
 
 bool VDP::fifo_empty()
