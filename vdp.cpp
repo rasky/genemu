@@ -43,18 +43,16 @@ int VDP::hcounter(void)
     if (REG12_MODE_H40)
     {
         pixclk = mclk * 420 / VDP_CYCLES_PER_LINE;
-        enum { SPLIT_POINT = 13+320+14+2 };
         pixclk += 0xD;
-        if (pixclk >= SPLIT_POINT)
-            pixclk = pixclk - SPLIT_POINT + 0x1C9;
+        if (pixclk >= 0x16D)
+            pixclk += 0x1C9 - 0x16D;
     }
     else
     {
         pixclk = mclk * 342 / VDP_CYCLES_PER_LINE;
-        enum { SPLIT_POINT = 13+256+14+2 };
         pixclk += 0xB;
-        if (pixclk >= SPLIT_POINT)
-            pixclk = pixclk - SPLIT_POINT + 0x1D2;
+        if (pixclk >= 0x128)
+            pixclk += 0x1D2 - 0x128;
     }
 
     return pixclk & 0x1FF;
