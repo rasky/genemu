@@ -207,14 +207,15 @@ void VDP::update_access_slot_freq()
     uint64_t cur_slot = access_slot_at(CPU_M68K.clock());
 
     // mem_log("VDP", "before update asfreq: cur_slot:%lld, clock:%lld, base_access_slot_time:%lld, base_access_slot:%lld\n",
-    //     cur_slot, CPU_M68K.clock(), base_access_slot_time, base_access_slot);
+        // cur_slot, CPU_M68K.clock(), base_access_slot_time, base_access_slot);
 
     base_access_slot_time = access_slot_time(cur_slot);
     base_access_slot = cur_slot;
-    access_slot_freq = PIXELRATE_TO_CLOCKS_F8(fifo_delay[mode_h40][vblank()]);
+    slots_per_line = fifo_delay[mode_h40][vblank()];
+    access_slot_freq = PIXELRATE_TO_CLOCKS_F8(slots_per_line);
 
     // mem_log("VDP", "after update asfreq: cur_slot:%lld, clock:%lld, base_access_slot_time:%lld, base_access_slot:%lld\n",
-    //     access_slot_at(CPU_M68K.clock()), CPU_M68K.clock(), base_access_slot_time, base_access_slot);
+        // access_slot_at(CPU_M68K.clock()), CPU_M68K.clock(), base_access_slot_time, base_access_slot);
 
     assert(access_slot_at(CPU_M68K.clock()) >= cur_slot);
 
@@ -227,14 +228,20 @@ void VDP::update_access_slot_freq()
 
 uint64_t VDP::access_slot_time(uint64_t numslot)
 {
+    int64_t lines, rem;
     int64_t s = numslot - base_access_slot;   // NOTE: might become negative
-    return ((s * access_slot_freq) >> 8) + base_access_slot_time;
+    lines = s / slots_per_line;
+    rem = s % slots_per_line;
+    return ((rem * access_slot_freq + 255) >> 8) + lines*VDP_CYCLES_PER_LINE + base_access_slot_time;
 }
 
 uint64_t VDP::access_slot_at(uint64_t when)
 {
+    int64_t lines, rem;
     when -= base_access_slot_time;
-    return ((when << 8) + 255) / access_slot_freq + base_access_slot;
+    lines = when / VDP_CYCLES_PER_LINE;
+    rem = when % VDP_CYCLES_PER_LINE;
+    return ((rem << 8) + 255) / access_slot_freq + lines*slots_per_line + base_access_slot;
 }
 
 void VDP::push_fifo(uint16_t value, int numbytes)
@@ -840,9 +847,10 @@ void VDP::reset()
     hvcounter_latched = false;
     base_access_slot = 0;
     base_access_slot_time = 0;
-    access_slot_freq = 1;
     display_disabled_hblank = false;
     in_scanline_hblank = false;
+    slots_per_line = 198;
+    access_slot_freq = PIXELRATE_TO_CLOCKS_F8(slots_per_line);
     update_access_slot_freq();
 }
 
