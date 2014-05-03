@@ -653,6 +653,17 @@ void VDP::dma_start()
         dma_fill_pending = true;
         return;
     }
+    else if (REG23_DMA_TYPE < 2)
+    {
+        // M68K DMA: we need to align the clock to 2-slot boundary
+        uint64_t now = CPU_M68K.clock();
+        uint64_t cur_slot = access_slot_at(now);
+        if ((cur_slot & 1) || (now != access_slot_time(cur_slot)))
+        {
+            uint64_t align_slot = (cur_slot+2) & ~1ULL;
+            CPU_M68K.burn(access_slot_time(align_slot));
+        }
+    }
 
     PCDMA_DEBUG = CPU_M68K.PC();
     status_reg |= STATUS_DMAPROGRESS;
