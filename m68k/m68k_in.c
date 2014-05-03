@@ -6913,7 +6913,7 @@ M68KMAKE_OP(movem, 32, re, pd)
 		if(register_list & (1 << i))
 		{
 			ea -= 4;
-			m68ki_write_32(ea, REG_DA[15-i]);
+			m68ki_write_32_pd(ea, REG_DA[15-i]);
 			count++;
 		}
 	AY = ea;
