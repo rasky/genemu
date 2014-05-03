@@ -73,6 +73,16 @@ int VDP::hcounter(void)
 int VDP::vcounter(void)
 {
     int vc = _vcounter;
+    int hc = hcounter();
+
+    if (!in_scanline_hblank &&
+        ((mode_h40 && hc >= 0x14A) ||
+        ((!mode_h40 && hc >= 0x10A))))
+    {
+        vc += 1;
+        if (vc >= (VERSION_PAL ? 313 : 262))
+            vc = 0;
+    }
 
     if (VERSION_PAL && mode_v40 && vc >= 0x10B)
         vc += 0x1D2 - 0x10B;
@@ -537,6 +547,7 @@ void VDP::scanline_hblank(uint8_t *screen)
     //         assert(0);
     //     }
     // }
+    in_scanline_hblank = true;
 
     _vcounter++;
     if (_vcounter == (VERSION_PAL ? 313 : 262))
@@ -598,6 +609,8 @@ void VDP::scanline_end(uint8_t* screen)
         // The Z80 IRQ line stays asserted for one line
         CPU_Z80.set_irq_line(false);
     }
+
+    in_scanline_hblank = false;
 }
 
 unsigned int VDP::scanline_hblank_clocks(void)
@@ -829,6 +842,7 @@ void VDP::reset()
     base_access_slot_time = 0;
     access_slot_freq = 1;
     display_disabled_hblank = false;
+    in_scanline_hblank = false;
     update_access_slot_freq();
 }
 

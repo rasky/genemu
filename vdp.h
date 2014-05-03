@@ -29,6 +29,7 @@ private:
     int line_counter_interrupt;
     bool command_word_pending;
     bool dma_fill_pending;
+    bool in_scanline_hblank;
     bool hvcounter_latched;
     uint16_t hvcounter_latch;
     int sprite_overflow;
