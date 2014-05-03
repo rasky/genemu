@@ -44,7 +44,7 @@ uint64_t CpuM68K::clock(void)
 void CpuM68K::burn(uint64_t target)
 {
     int cycles = (target - m68k_clock() * M68K_FREQ_DIVISOR) / M68K_FREQ_DIVISOR;
-    mem_log("M68K", "Burning %d cycles at %lld to reach %lld\n", cycles*M68K_FREQ_DIVISOR, clock(), target);
+    // mem_log("M68K", "Burning %d cycles at %lld to reach %lld\n", cycles*M68K_FREQ_DIVISOR, clock(), target);
     m68k_burn_timeslice(cycles);
     assert(target >= m68k_clock() * M68K_FREQ_DIVISOR);
     _delta = target - m68k_clock() * M68K_FREQ_DIVISOR;
