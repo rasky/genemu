@@ -9237,7 +9237,7 @@ M68KMAKE_OP(stop, 0, ., .)
 		m68ki_trace_t0();			   /* auto-disable (see m68kcpu.h) */
 		CPU_STOPPED |= STOP_LEVEL_STOP;
 		m68ki_set_sr(new_sr);
-		m68ki_remaining_cycles = 0;
+		USE_ALL_CYCLES();
 		return;
 	}
 	m68ki_exception_privilege_violation();
