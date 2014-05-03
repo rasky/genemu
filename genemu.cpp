@@ -42,6 +42,7 @@ int main(int argc, char *argv[])
 #endif
 
 #if 1
+    {
     char buf[256];
     int pc = 0;
     strcpy(buf, argv[1]);
@@ -53,6 +54,7 @@ int main(int argc, char *argv[])
         pc += oplen;
     }
     fclose(f);
+    }
 #endif
 
     CPU_M68K.init();
@@ -84,6 +86,8 @@ int main(int argc, char *argv[])
 
             int hblank_clocks = VDP.scanline_hblank_clocks();
 
+            // mem_log("EMU", "Begin scanline %d at %lld (master: %lld, hblank: %lld, end: %lld)\n", sl,
+            //     CPU_M68K.clock(), MASTER_CLOCK, MASTER_CLOCK+hblank_clocks, MASTER_CLOCK + VDP_CYCLES_PER_LINE);
             CPU_M68K.run(MASTER_CLOCK + hblank_clocks);
             CPU_Z80 .run(MASTER_CLOCK + hblank_clocks);
             MASTER_CLOCK += hblank_clocks;
@@ -124,6 +128,20 @@ int main(int argc, char *argv[])
     assert(checksum == m68k_read_memory_16(0x18e));
 #endif
 
+#if 0
+    {
+    char buf[256];
+    int pc = 0xff0002;
+    FILE *f = fopen(buf, "w");
+    while (pc <= 0xff0100) {
+        int oplen = m68k_disassemble(buf, pc, M68K_CPU_TYPE_68000);
+        fprintf(stdout, "%06x\t%s\n", pc, buf);
+        pc += oplen;
+    }
+    fclose(f);
+    }
+#endif
+
     return 0;
 }
 
@@ -135,5 +153,5 @@ void gentrace(void)
 
     char buf[2048];
     int oplen = m68k_disassemble(buf, pc, M68K_CPU_TYPE_68000);
-    fprintf(stdout, "%06x\t%s\t\t[A0=%08x]\n", pc, buf, m68k_get_reg(NULL, M68K_REG_A0));
+    fprintf(stdout, "%06x\t%s\t\t[D1=%08x]\n", pc, buf, m68k_get_reg(NULL, M68K_REG_D1));
 }
