@@ -21,6 +21,8 @@ extern int framecounter;
 #define REG2_NAMETABLE_A      (BITS(regs[2], 3, 3) << 13)
 #define REG3_NAMETABLE_W      (BITS(regs[3], 1, 5) << 11)
 #define REG4_NAMETABLE_B      (BITS(regs[4], 0, 3) << 13)
+#define REG5_SAT_ADDRESS      ((regs[5] & (mode_h40 ? 0x7E : 0x7F)) << 9)
+#define REG5_SAT_SIZE         (mode_h40 ? (1<<10) : (1<<9))
 #define REG10_LINE_COUNTER    BITS(regs[10], 0, 8)
 #define REG12_MODE_H40        BIT(regs[12], 0)
 #define REG15_DMA_INCREMENT   regs[15]
@@ -265,6 +267,17 @@ void VDP::push_fifo(uint16_t value, int numbytes)
     //     access_slot_time(fifoclock[3]), fifoclock[3]);
 }
 
+void VDP::VRAM_W(uint16_t address, uint8_t value)
+{
+    VRAM[address] = value;
+
+    // Update internal SAT cache if it was modified
+    // This cache is needed for Castlevania Bloodlines (level 6-2)
+    if (address >= REG5_SAT_ADDRESS && address_reg < REG5_SAT_ADDRESS + REG5_SAT_SIZE)
+        SAT_CACHE[address - REG5_SAT_ADDRESS] = value;
+}
+
+
 void VDP::data_port_w16(uint16_t value)
 {
     command_word_pending = false;
@@ -275,8 +288,8 @@ void VDP::data_port_w16(uint16_t value)
         mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%d\n",
                 address_reg, REG15_DMA_INCREMENT, _vcounter);
         push_fifo(value, 2);
-        VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
-        VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
+        VRAM_W((address_reg    ) & 0xFFFF, value >> 8);
+        VRAM_W((address_reg ^ 1) & 0xFFFF, value & 0xFF);
         address_reg += REG15_DMA_INCREMENT;
         break;
     case 0x3:
@@ -307,7 +320,7 @@ void VDP::data_port_w16(uint16_t value)
         break;
 
     default:
-        fprintf(stdout, "[VDP][PC=%06x](%04d) invalid data port write16: code:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, code_reg);
+        mem_err("VDP", "invalid data port write16: code:%02x\n", code_reg);
         assert(!"data port w not handled");
     }
 
@@ -662,7 +675,7 @@ void VDP::dma_fill()
         mem_log("VDP", "DMA VRAM fill: address:%04x, increment:%04x, length:%x, value: %04x\n",
             address_reg, REG15_DMA_INCREMENT, length, fifo[0]);
         do {
-            VRAM[(address_reg ^ 1) & 0xFFFF] = fifo[0] >> 8;
+            VRAM_W((address_reg ^ 1) & 0xFFFF, fifo[0] >> 8);
             address_reg += REG15_DMA_INCREMENT;
             src_addr_low++;
         } while (--length);
@@ -723,8 +736,8 @@ void VDP::dma_m68k()
         switch (code_reg & 0xF) {
             case 0x1:
                 push_fifo(value, 2);
-                VRAM[(address_reg    ) & 0xFFFF] = value >> 8;
-                VRAM[(address_reg ^ 1) & 0xFFFF] = value & 0xFF;
+                VRAM_W((address_reg    ) & 0xFFFF, value >> 8);
+                VRAM_W((address_reg ^ 1) & 0xFFFF, value & 0xFF);
                 break;
             case 0x3:
                 push_fifo(value, 1);
@@ -785,7 +798,7 @@ void VDP::dma_copy()
 
     do {
         uint16_t value = VRAM[src_addr_low ^ 1];
-        VRAM[(address_reg ^ 1) & 0xFFFF] = value;
+        VRAM_W((address_reg ^ 1) & 0xFFFF, value);
 
         address_reg += REG15_DMA_INCREMENT;
         src_addr_low++;

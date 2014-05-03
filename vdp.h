@@ -18,6 +18,7 @@ private:
     uint8_t VRAM[0x10000];
     uint16_t CRAM[0x40];
     uint16_t VSRAM[0x40];  // only 40 words are really used
+    uint8_t SAT_CACHE[0x400]; // internal copy of SAT
     uint8_t regs[0x20];
     uint16_t fifo[4];
     uint64_t fifoclock[4];
@@ -43,6 +44,8 @@ private:
     uint64_t access_slot_at(uint64_t when);
     uint64_t access_slot_time(uint64_t numslot);
     void update_access_slot_freq(void);
+
+    void VRAM_W(uint16_t address, uint8_t value);
 
 private:
     void register_w(int reg, uint8_t value);
