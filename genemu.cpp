@@ -34,9 +34,6 @@ int main(int argc, char *argv[])
     strcpy(romname, argv[1]);
     mem_init(romsize);
 
-    for (int i=2;i<argc;++i)
-        mem_apply_gamegenie(argv[i]);
-
 #if 0
     uint16_t checksum = 0;
     for (int i=0;i<(romsize-512)/2;i++)
@@ -110,6 +107,12 @@ int main(int argc, char *argv[])
         hw_endaudio();
         hw_endframe();
         ++framecounter;
+
+        if (framecounter == 100)
+        {
+            for (int i=2;i<argc;++i)
+                mem_apply_gamegenie(argv[i]);
+        }
 
         state_poll();
     }
