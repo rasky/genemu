@@ -18,6 +18,7 @@ private:
     uint8_t VRAM[0x10000];
     uint16_t CRAM[0x40];
     uint16_t VSRAM[0x40];  // only 40 words are really used
+    uint8_t SAT_CACHE[0x400]; // internal copy of SAT
     uint8_t regs[0x20];
     uint16_t fifo[4];
     uint16_t address_reg;
@@ -33,6 +34,8 @@ private:
     bool sprite_collision;
     int mode_h40;
     int mode_pal;
+
+    void VRAM_W(uint16_t address, uint8_t value);
 
 private:
     void register_w(int reg, uint8_t value);

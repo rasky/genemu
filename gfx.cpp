@@ -196,7 +196,8 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     if (!BIT(VDP.regs[1], 6) || keystate[SDL_SCANCODE_S])
         return;
 
-    uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & 0x7F) << 9);
+    uint8_t mask = VDP.mode_h40 ? 0x7E : 0x7F;
+    uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & mask) << 9);
 
     // This is both the size of the table as seen by the VDP
     // *and* the maximum number of sprites that are processed
@@ -236,9 +237,10 @@ void GFX::draw_sprites(uint8_t *screen, int line)
     for (int i = 0; i < SPRITE_TABLE_SIZE && sidx < SPRITE_TABLE_SIZE; ++i)
     {
         uint8_t *table = start_table + sidx*8;
-        int sy = ((table[0] & 0x3) << 8) | table[1];
-        int sh = BITS(table[2], 0, 2) + 1;
-        int link = BITS(table[3], 0, 7);
+        uint8_t *cache = VDP.SAT_CACHE + sidx*8;
+        int sy = ((cache[0] & 0x3) << 8) | cache[1];
+        int sh = BITS(cache[2], 0, 2) + 1;
+        int link = BITS(cache[3], 0, 7);
         uint16_t name = (table[4] << 8) | table[5];
         int flipv = BITS(name, 12, 1);
         int fliph = BITS(name, 11, 1);
