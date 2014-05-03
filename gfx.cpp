@@ -24,7 +24,7 @@ private:
 
     uint8_t* get_hscroll_vram(int line);
     inline bool in_window(int x, int y);
-    uint8_t mix(int x, int y, uint8_t back, uint8_t b, uint8_t a, uint8_t s);
+    uint8_t mix(uint8_t back, uint8_t b, uint8_t a, uint8_t s);
 
 public:
     int screen_offset() { return (SCREEN_WIDTH - screen_width()) / 2; }
@@ -345,7 +345,7 @@ void GFX::draw_plane_b(uint8_t *screen, int line)
     draw_plane_ab(screen, line, VDP.get_nametable_B(), hsb, VDP.VSRAM+1);
 }
 
-uint8_t GFX::mix(int x, int y, uint8_t back, uint8_t b, uint8_t a, uint8_t s)
+uint8_t GFX::mix(uint8_t back, uint8_t b, uint8_t a, uint8_t s)
 {
     uint8_t tile = back;
 
@@ -454,14 +454,15 @@ void GFX::render_scanline(uint8_t *screen, int line)
 
     for (int i=0; i<SCREEN_WIDTH; ++i)
     {
+        int x = i - screen_offset();
         uint8_t pix = back;
 
-        if (i >= screen_offset() && i < screen_offset() + screen_width())
+        if (x >= 0 && x < screen_width())
         {
             if (enable_planes)
             {
-                uint8_t *aw = in_window(i, line) ? pw : pa;
-                pix = mix(i, line, back, pb[i], aw[i], ps[i]);
+                uint8_t *aw = in_window(x, line) ? pw : pa;
+                pix = mix(back, pb[i], aw[i], ps[i]);
             }
         }
 
