@@ -63,6 +63,7 @@ void backup_ram_init(void)
     backup_ram_shadow = (uint8_t*)m68k_memtable[0x20];
     m68k_memtable[0x20] = MEMFUN_PAIR(&BACKUP_RAM_ACCESS);
     m68k_memtable[0xA1] = MEMFUN_PAIR(&BACKUP_RAM_SWITCH);
+    memset(BACKUP_RAM, 0xFF, sizeof(BACKUP_RAM));  // required by dinodini
 }
 
 /**************************************
