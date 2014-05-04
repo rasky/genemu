@@ -33,7 +33,8 @@ public:
     int screen_offset() { return (SCREEN_WIDTH - screen_width()) / 2; }
     int screen_width() { return BIT(VDP.regs[12], 0) ? 40*8 : 32*8; }
 
-    void render_scanline(uint8_t *screen, int line);
+    void render_scanline(uint8_t *screen, int line, bool force_display=false);
+    void mask_scanline(uint8_t *screen, int line, int *mask);
 
 } GFX;
 
@@ -195,9 +196,7 @@ void GFX::draw_plane_ab(uint8_t *screen, int line, int ntaddr, uint16_t scrollx,
 
 void GFX::draw_sprites(uint8_t *screen, int line)
 {
-    // Plane/sprite disable, show only backdrop
-    if (!BIT(VDP.regs[1], 6) || keystate[SDL_SCANCODE_S])
-        return;
+    if (keystate[SDL_SCANCODE_S]) return;
 
     uint8_t mask = VDP.mode_h40 ? 0x7E : 0x7F;
     uint8_t *start_table = VDP.VRAM + ((VDP.regs[5] & mask) << 9);
@@ -425,7 +424,7 @@ uint32_t GFX::HACK_check_dcolor_mode()
 }
 
 
-void GFX::render_scanline(uint8_t *screen, int line)
+void GFX::render_scanline(uint8_t *screen, int line, bool force_display)
 {
     // Overflow is the maximum size we can draw outside to avoid
     // wasting time and code in clipping. The maximum object is a 4x4 sprite,
@@ -472,7 +471,7 @@ void GFX::render_scanline(uint8_t *screen, int line)
         return;
 
     // Gfx enable
-    bool enable_planes = BIT(VDP.regs[1], 6);
+    bool enable_planes = BIT(VDP.regs[1], 6) || force_display;
 
     memset(buffer, 0, sizeof(buffer));
 
@@ -534,6 +533,59 @@ void GFX::render_scanline(uint8_t *screen, int line)
     }
 }
 
+
+void GFX::mask_scanline(uint8_t *screen, int line, int *mask)
+{
+    uint16_t rgb = VDP.CRAM[BITS(VDP.regs[7], 0, 6) & 0x3F];
+    uint8_t r = CRAM_R(rgb);
+    uint8_t g = CRAM_G(rgb);
+    uint8_t b = CRAM_B(rgb);
+
+    mem_log("GFX", "mask line %d: %d %d %d %d %d %d\n", line,
+        mask[0]&0x7FFF, mask[1]&0x7FFF, mask[2]&0x7FFF, mask[3]&0x7FFF, mask[4]&0x7FFF, mask[5]&0x7FFF);
+
+    // Redraw forcing display, since it might have been hidden at beginning
+    render_scanline(screen, line, true);
+
+    bool en = !BIT(*mask, 15);
+    int x = 0;
+    do
+    {
+        bool newen = BIT(*mask, 15);
+        int newx   = BITS(*mask, 0, 14);
+
+        if (!en && newen)
+        {
+            for (;x<newx;x++)
+            {
+                screen[x*4+0] = r;
+                screen[x*4+1] = g;
+                screen[x*4+2] = b;
+                screen[x*4+3] = 0;
+            }
+        }
+
+        en = newen;
+        x = newx;
+        ++mask;
+    } while (*mask >= 0);
+
+    if (!en)
+    {
+        for (;x<screen_width();x++)
+        {
+            screen[x*4+0] = r;
+            screen[x*4+1] = g;
+            screen[x*4+2] = b;
+            screen[x*4+3] = 0;
+        }
+    }
+}
+
+void gfx_mask_scanline(uint8_t *screen, int line, int *mask)
+{
+    GFX.mask_scanline(screen, line, mask);
+}
 
 void gfx_render_scanline(uint8_t *screen, int line)
 {

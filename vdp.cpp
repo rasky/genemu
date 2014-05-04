@@ -44,30 +44,33 @@ extern int framecounter;
 
 class VDP VDP;
 
+int VDP::hpos(void)
+{
+    int mclk = CPU_M68K.clock() % VDP_CYCLES_PER_LINE;
+    return mclk * (mode_h40 ? 420 : 342) / VDP_CYCLES_PER_LINE;
+}
+
 // Return 9-bit accurate hcounter
 int VDP::hcounter(void)
 {
-    int mclk = CPU_M68K.clock() % VDP_CYCLES_PER_LINE;
-    int pixclk;
+    int hc = hpos();
 
     // Accurate 9-bit hcounter emulation, from timing posted here:
     // http://gendev.spritesmind.net/forum/viewtopic.php?p=17683#17683
     if (mode_h40)
     {
-        pixclk = mclk * 420 / VDP_CYCLES_PER_LINE;
-        pixclk += 0xD;
-        if (pixclk >= 0x16D)
-            pixclk += 0x1C9 - 0x16D;
+        hc += 0x1A;
+        if (hc >= 0x16D)
+            hc += 0x1C9 - 0x16D;
     }
     else
     {
-        pixclk = mclk * 342 / VDP_CYCLES_PER_LINE;
-        pixclk += 0xB;
-        if (pixclk >= 0x128)
-            pixclk += 0x1D2 - 0x128;
+        hc += 0x18;
+        if (hc >= 0x128)
+            hc += 0x1D2 - 0x128;
     }
 
-    return pixclk & 0x1FF;
+    return hc & 0x1FF;
 }
 
 int VDP::vcounter(void)
@@ -148,11 +151,19 @@ void VDP::register_w(int reg, uint8_t value)
         case 1:
             if (BIT((oldvalue ^ value), 6))
             {
+                bool in_hblank = hblank();
+                bool in_vblank = vblank();
+
                 // Change in display enable: update access slot frequency
                 update_access_slot_freq();
 
-                if (!REG1_DISP_ENABLED && hblank())
+                if (!REG1_DISP_ENABLED && in_hblank)
                     display_disabled_hblank = true;
+                if (!in_vblank && !in_hblank)
+                {
+                    display_enabled_midframe[demc++] = (REG1_DISP_ENABLED ? 0x8000 : 0) | hpos();
+                    assert(demc < 16);
+                }
             }
             break;
     }
@@ -534,10 +545,17 @@ void VDP::scanline_begin(uint8_t *screen)
 
     dma_poll();
     display_disabled_hblank = false;
+    demc = 0;
 }
 
 void VDP::scanline_hblank(uint8_t *screen)
 {
+    if (demc > 0)
+    {
+        display_enabled_midframe[demc] = -1;
+        gfx_mask_scanline(screen, _vcounter, display_enabled_midframe);
+    }
+
     // if (mode_h40)
     // {
     //     if (hcounter() != 0x14A)
@@ -628,9 +646,9 @@ unsigned int VDP::scanline_hblank_clocks(void)
     enum { TOLERANCE=0 };
 
     if (mode_h40)
-        return ((0x14A - 0xD - TOLERANCE) * VDP_CYCLES_PER_LINE + 420/2) / 420;
+        return ((0x14A - 0x1A - TOLERANCE) * VDP_CYCLES_PER_LINE + 420/2) / 420;
     else
-        return ((0x10A - 0xB - TOLERANCE) * VDP_CYCLES_PER_LINE + 342/2) / 342;
+        return ((0x10A - 0x18 - TOLERANCE) * VDP_CYCLES_PER_LINE + 342/2) / 342;
 }
 
 unsigned int VDP::num_scanlines(void)

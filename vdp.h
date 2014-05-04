@@ -42,6 +42,8 @@ private:
     int slots_per_line;
     uint64_t base_access_slot;
     uint64_t base_access_slot_time;
+    int display_enabled_midframe[16];
+    int demc;
 
     uint64_t access_slot_at(uint64_t when);
     uint64_t access_slot_time(uint64_t numslot);
@@ -51,6 +53,7 @@ private:
 
 private:
     void register_w(int reg, uint8_t value);
+    int hpos();
     int hcounter();   // 9-bit accurate horizontal
     int vcounter();   // 9-bit accurate vcounter
     bool hblank();
