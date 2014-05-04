@@ -48,6 +48,7 @@ public:
     bool get_busreq_line() { return _busreq_line; };
 
     void set_irq_line(bool assert);
+    bool get_irq_line();
 };
 
 extern CpuM68K CPU_M68K;

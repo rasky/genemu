@@ -103,6 +103,11 @@ void CpuZ80::sync(void)
     run(CPU_M68K.clock());
 }
 
+bool CpuZ80::get_irq_line(void)
+{
+    return _cpu.IRequest == INT_IRQ;
+}
+
 void CpuZ80::set_irq_line(bool line)
 {
     if (!_reset_once) return;

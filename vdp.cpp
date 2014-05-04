@@ -611,7 +611,7 @@ void VDP::scanline_end(uint8_t* screen)
 
         status_reg &= ~STATUS_VIRQPENDING;
     }
-    if (_vcounter == (VERSION_PAL ? 0xF1 : 0xE1))
+    else if (CPU_Z80.get_irq_line())
     {
         // The Z80 IRQ line stays asserted for one line
         CPU_Z80.set_irq_line(false);
