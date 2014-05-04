@@ -529,11 +529,10 @@ void VDP::scanline_begin(uint8_t *screen)
         line_counter_interrupt = REG10_LINE_COUNTER;
     }
 
-    dma_poll();
-
-    mem_log("VDP", "render scanline %d\n", _vcounter);
+    mem_log("VDP", "render scanline %d (hc:%x)\n", _vcounter, hcounter());
     gfx_render_scanline(screen, _vcounter);
 
+    dma_poll();
     display_disabled_hblank = false;
 }
 
