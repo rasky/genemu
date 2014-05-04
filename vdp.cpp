@@ -11,6 +11,7 @@ extern "C" {
 
 extern int VERSION_PAL;
 extern int framecounter;
+extern uint64_t MASTER_CLOCK;
 
 #define REG0_HVLATCH          BIT(regs[0], 1)
 #define REG0_LINE_INTERRUPT   BIT(regs[0], 4)
@@ -755,7 +756,7 @@ void VDP::dma_m68k()
     if (length == 0)
         length = 0xFFFF;
 
-    uint64_t endline = (CPU_M68K.clock() / VDP_CYCLES_PER_LINE + 1) * VDP_CYCLES_PER_LINE;
+    uint64_t endline = MASTER_CLOCK + VDP_CYCLES_PER_LINE;
 
     mem_log("VDP", "(V=%x,H=%x)(clock=%lld, end=%lld, vblank=%d) DMA M68k->%s copy: src:%04x, dst:%04x, length:%d, increment:%d\n",
         vcounter(), hcounter(), CPU_M68K.clock(), endline, vblank(),
