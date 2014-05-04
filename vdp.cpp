@@ -601,10 +601,10 @@ unsigned int vdp_mem_r16(unsigned int address)
         case 0xE: return VDP.hvcounter_r16();
 
         // unused register, see vdpfifotesting
-        case 0x18: return 0xFF;
+        case 0x18: return 0xFFFF;
 
         // debug register
-        case 0x1C: return 0xFF;
+        case 0x1C: return 0xFFFF;
 
         default:
             fprintf(stdout, "[VDP][PC=%06x](%04d) unhandled read16 IO:%02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, address&0x1F);
