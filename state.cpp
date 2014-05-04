@@ -182,6 +182,7 @@ void loadstate(const char *fn)
     fread(&CPU_Z80._busreq_line, 1, 1, f);
     fseek(f, 2, SEEK_CUR);
     fread(&Z80_BANK, 1, 4, f);
+    CPU_Z80._reset_once = true;
 
     assert(ftell(f) == 0x440);
     fseek(f, 0x474, SEEK_SET);
