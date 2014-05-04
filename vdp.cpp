@@ -866,8 +866,8 @@ void VDP::reset()
     update_access_slot_freq();
 }
 
-#define M68K_READ_DELAY    (15*7)
-#define M68K_WRITE_DELAY   (15*7)
+#define M68K_READ_DELAY    (4*7)
+#define M68K_WRITE_DELAY   (4*7)
 
 void vdp_mem_w8(unsigned int address, unsigned int value)
 {
