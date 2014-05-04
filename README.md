@@ -9,10 +9,10 @@ only on accuracy (not performance).
 How to use
 ==========
 
-   $ genemu romfile [GG-CODE [GG-CODE ...]]
+   $ genemu romfile
 
-Genemu supports both bin and smd romfiles. You can specify zero or more Game Genie
-codes on the command line, and they will be applied at startup.
+Genemu supports both bin and smd romfiles. Use --help for some additional
+command line option.
 
 
 What's emulated
