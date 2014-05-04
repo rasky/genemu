@@ -547,7 +547,7 @@ void mem_err(const char *subs, const char *fmt, ...)
     va_list va;
 
     if (activecpu == 0)
-        fprintf(stderr, "[%s][MPC=%06x](%04d) ", subs, CPU_M68K.PC(), framecounter);
+        fprintf(stderr, "[%s][MPC=%06x](%04d) ", subs, CPU_M68K.PPC(), framecounter);
     else
         fprintf(stderr, "[%s][ZPC=%06x](%04d) ", subs, CPU_Z80.PC(), framecounter);
     va_start(va, fmt);
