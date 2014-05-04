@@ -144,8 +144,8 @@ void VDP::data_port_w16(uint16_t value)
     switch (code_reg & 0xF)
     {
     case 0x1:
-        mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%d\n",
-                address_reg, REG15_DMA_INCREMENT, _vcounter);
+        mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%x hc:%x\n",
+                address_reg, REG15_DMA_INCREMENT, vcounter(), hcounter());
         VRAM_W((address_reg    ) & 0xFFFF, value >> 8);
         VRAM_W((address_reg ^ 1) & 0xFFFF, value & 0xFF);
         address_reg += REG15_DMA_INCREMENT;
