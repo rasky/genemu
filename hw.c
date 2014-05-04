@@ -16,12 +16,13 @@ const uint8_t *keystate;
 uint8_t keypressed[256];
 uint8_t keyreleased[256];
 static uint8_t keyoldstate[256];
-static clock_t frameclock;
 static int samples_per_frame;
 static int framecounter;
 static int audiocounter;
+static clock_t fpsclock;
+static int fpscounter;
 
-#define ZOOM 3
+#define WINDOW_WIDTH 900
 
 static void fill_audio(void *userdata, uint8_t* stream, int len);
 
@@ -34,15 +35,11 @@ void hw_init(int audiofreq, int fps)
     }
     atexit(SDL_Quit);
 
-#if 1
     screen = SDL_CreateWindow("Genemu - Sega Genesis Emulator",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        320*ZOOM, 244*ZOOM, SDL_WINDOW_RESIZABLE);
+        WINDOW_WIDTH, WINDOW_WIDTH*3/4, SDL_WINDOW_RESIZABLE);
     renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_PRESENTVSYNC);
-#else
-    SDL_CreateWindowAndRenderer(320*ZOOM, 240*ZOOM, SDL_WINDOW_RESIZABLE,
-        &screen, &renderer);
-#endif
+
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");  // make the scaled rendering look smoother.
     SDL_RenderSetLogicalSize(renderer, 320, 240);
 
@@ -128,12 +125,20 @@ void hw_endframe(void)
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, frame, NULL, NULL);
         SDL_RenderPresent(renderer);
+        fpscounter += 1;
 
         while (audiocounter < framecounter)
             SDL_Delay(1);
     }
-    else
-        printf("HW: frameskipping %d\n", framecounter);
+
+    if (fpsclock+1000 < SDL_GetTicks())
+    {
+        char title[256];
+        sprintf(title, "Genemu - Sega Genesis Emulator - %d FPS", fpscounter);
+        SDL_SetWindowTitle(screen, title);
+        fpscounter = 0;
+        fpsclock += 1000;
+    }
 
     framecounter += 1;
 }
