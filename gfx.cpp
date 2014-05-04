@@ -28,7 +28,7 @@ private:
 
 public:
     int screen_offset() { return (SCREEN_WIDTH - screen_width()) / 2; }
-    int screen_width() { return BIT(VDP.regs[12], 7) ? 40*8 : 32*8; }
+    int screen_width() { return BIT(VDP.regs[12], 0) ? 40*8 : 32*8; }
 
     void render_scanline(uint8_t *screen, int line);
 
