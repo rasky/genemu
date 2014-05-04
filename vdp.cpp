@@ -278,7 +278,7 @@ uint16_t VDP::status_register_r(void)
     #define STATUS_VBLANK          (1<<3)
     #define STATUS_HBLANK          (1<<2)
     #define STATUS_DMAPROGRESS     (1<<1)
-    #define STATUS_PAL             (1<<1)
+    #define STATUS_PAL             (1<<0)
 
     uint16_t status = status_reg;
     int hc = hcounter();
@@ -377,6 +377,7 @@ void VDP::scanline(uint8_t* screen)
         CPU_Z80.set_irq_line(false);
     }
 
+    mem_log("VDP", "render scanline %d\n", _vcounter);
     gfx_render_scanline(screen, _vcounter);
 }
 
