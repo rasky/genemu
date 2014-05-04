@@ -91,7 +91,7 @@ void VDP::register_w(int reg, uint8_t value)
     if (!BIT(regs[0x1], 2) && reg > 0xA) return;
 
     regs[reg] = value;
-    fprintf(stdout, "[VDP][PC=%06x](%04d) reg:%02d <- %02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, reg, value);
+    mem_log("VDP", "reg:%02d <- %02x\n", reg, value);
 
     // Writing a register clear the first command word
     // (see sonic3d intro wrong colors, and vdpfifotesting)
