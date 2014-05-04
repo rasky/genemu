@@ -1,0 +1,28 @@
+<html>
+<head>
+    <script src="jquery-2.1.1.min.js"></script>
+</head>
+<body>
+
+<table id="stbl">
+</table>
+
+<script>
+    $(document).ready(function() {
+        $.getJSON("testout.json", function(data) {
+            var stbl = $('#stbl');
+            $.each(data.games, function(_,game) {
+                var row = $('<tr>');
+                $.each(game.sshots, function(_, ss) {
+                    $('<td><img src="' + ss + '"/></td>').appendTo(row);
+                })
+                row.appendTo(stbl);
+            })
+        });
+    });
+
+</script>
+
+
+</body>
+</html>

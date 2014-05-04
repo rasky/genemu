@@ -3,3 +3,4 @@ roms
 debugroms
 *.project
 *.sublime-workspace
+.DS_Store
