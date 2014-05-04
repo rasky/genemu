@@ -7,9 +7,17 @@
 #define MAX(a,b)          ((a)>(b)?(a):(b))
 #define MIN(a,b)          ((a)<(b)?(a):(b))
 
+#define DISABLE_LOGGING   0
+
 void mem_init(int romsize);
-void mem_log(const char *subs, const char *fmt, ...);
-void mem_err(const char *subs, const char *fmt, ...);
 int load_bin(const char *fn);
 int load_smd(const char *fn);
 bool mem_apply_gamegenie(const char *gg);
+
+#if DISABLE_LOGGING
+	#define mem_log(...)  do {} while(0)
+	#define mem_err(...)  do {} while(0)
+#else
+	void mem_log(const char *subs, const char *fmt, ...);
+	void mem_err(const char *subs, const char *fmt, ...);
+#endif

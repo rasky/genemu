@@ -527,6 +527,7 @@ void mem_init(int romsize)
     cartidge_init();
 }
 
+#if !DISABLE_LOGGING
 void mem_log(const char *subs, const char *fmt, ...)
 {
     extern int framecounter;
@@ -554,6 +555,7 @@ void mem_err(const char *subs, const char *fmt, ...)
     vfprintf(stderr, fmt, va);
     va_end(va);
 }
+#endif
 
 bool mem_apply_gamegenie(const char *gg)
 {
