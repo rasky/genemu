@@ -10,13 +10,14 @@ static SDL_Renderer *renderer;
 static SDL_Texture *frame;
 static uint8_t framebuf[320*240*4];
 
-static int16_t AUDIO_BUF[HW_AUDIO_NUMBUFFERS][HW_AUDIO_NUMSAMPLES*2];
+static int16_t *AUDIO_BUF[HW_AUDIO_NUMBUFFERS];
 static int audio_buf_index_w=1, audio_buf_index_r=0;
 const uint8_t *keystate;
 uint8_t keypressed[256];
 uint8_t keyreleased[256];
 static uint8_t keyoldstate[256];
 static clock_t frameclock;
+static int samples_per_frame;
 static int framecounter;
 static int audiocounter;
 
@@ -24,7 +25,7 @@ static int audiocounter;
 
 static void fill_audio(void *userdata, uint8_t* stream, int len);
 
-void hw_init(void)
+void hw_init(int audiofreq, int fps)
 {
     if ( SDL_Init(SDL_INIT_AUDIO|SDL_INIT_VIDEO) < 0 )
     {
@@ -54,19 +55,25 @@ void hw_init(void)
 
 
 #if 1
+    samples_per_frame = audiofreq / fps;
+    fprintf(stderr, "Music set to %d FPS\n", fps);
+
     /* Initialize audio */
     SDL_AudioSpec wanted;
 
-    wanted.freq = HW_AUDIO_FREQ;
+    wanted.freq = audiofreq;
     wanted.format = AUDIO_S16;
     wanted.channels = 2;
-    wanted.samples = HW_AUDIO_NUMSAMPLES;
+    wanted.samples = samples_per_frame;
     wanted.callback = fill_audio;
     wanted.userdata = NULL;
     if (SDL_OpenAudio(&wanted, NULL) < 0) {
         fprintf(stderr, "Couldn't open audio: %s\n", SDL_GetError());
         exit(1);
     }
+
+    for (int i=0;i<HW_AUDIO_NUMBUFFERS;++i)
+        AUDIO_BUF[i] = calloc(samples_per_frame*2*2, 1);
 
     SDL_PauseAudio(0);
 #endif
@@ -131,7 +138,7 @@ void hw_endframe(void)
     framecounter += 1;
 }
 
-void hw_beginaudio(int16_t **buf)
+void hw_beginaudio(int16_t **buf, int *nsamples)
 {
     extern int framecounter;
 #if 1
@@ -139,6 +146,7 @@ void hw_beginaudio(int16_t **buf)
         printf("[AUDIO](FC=%04d/R=%04d/W%04d) Warning: overflow audio buffer (producing too fast)\n", framecounter, audio_buf_index_r, audio_buf_index_w);
 #endif
     *buf = AUDIO_BUF[audio_buf_index_w % HW_AUDIO_NUMBUFFERS];
+    *nsamples = samples_per_frame;
 }
 
 void hw_endaudio(void)
@@ -157,7 +165,7 @@ void fill_audio(void *userdata, uint8_t *stream, int len)
         return;
     }
 
-    assert(sizeof(AUDIO_BUF) / HW_AUDIO_NUMBUFFERS == len);
+    assert(samples_per_frame*2*2 == len);   // 2 channels, 2 bytes
     memcpy(stream, AUDIO_BUF[audio_buf_index_r++ % HW_AUDIO_NUMBUFFERS], len);
     ++audiocounter;
 }

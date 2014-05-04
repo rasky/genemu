@@ -10,13 +10,10 @@ extern "C" {
 #include <string.h>
 #include <assert.h>
 
-#define MAIN_CPU_FREQ     (VDP_MASTER_FREQ / M68K_FREQ_DIVISOR)
-#define SLAVE_CPU_FREQ    (VDP_MASTER_FREQ / Z80_FREQ_DIVISOR)
-
 int framecounter;
 uint64_t MASTER_CLOCK;   // VDP_MASTER_FREQ
 char romname[2048];
-
+extern int VERSION_PAL;
 
 int main(int argc, char *argv[])
 {
@@ -55,13 +52,14 @@ int main(int argc, char *argv[])
     fclose(f);
 #endif
 
+    hw_init(YM2612_FREQ, VERSION_PAL ? 50 : 60);
+
     CPU_M68K.init();
     CPU_Z80.init();
 
-    hw_init();
-    vdp_init();
     MASTER_CLOCK = 0;
     CPU_M68K.reset();
+    VDP.reset();
 
     while (hw_poll())
     {
@@ -71,10 +69,10 @@ int main(int argc, char *argv[])
         int pitch;
         hw_beginframe(&screen, &pitch);
 
-        int16_t *audio;
-        hw_beginaudio(&audio);
+        int16_t *audio; int nsamples;
+        hw_beginaudio(&audio, &nsamples);
         int audio_index = 0;
-        int audio_step = (HW_AUDIO_NUMSAMPLES << 16) / numscanlines;
+        int audio_step = (nsamples << 16) / numscanlines;
 
         for (int sl=0;sl<numscanlines;++sl)
         {
