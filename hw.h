@@ -14,6 +14,11 @@ extern uint8_t keyreleased[256];
 void hw_init(int audiofreq, int fps);
 int hw_poll(void);
 
+void hw_enable_audio(int enable);
+void hw_enable_video(int enable);
+
+void hw_save_screenshot(const char *fn);
+
 void hw_beginframe(uint8_t **screen, int *pitch);
 void hw_endframe();
 

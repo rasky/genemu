@@ -21,6 +21,8 @@ static int framecounter;
 static int audiocounter;
 static clock_t fpsclock;
 static int fpscounter;
+static int g_audioenable;
+static int g_videoenable;
 
 #define WINDOW_WIDTH 900
 
@@ -35,23 +37,8 @@ void hw_init(int audiofreq, int fps)
     }
     atexit(SDL_Quit);
 
-    screen = SDL_CreateWindow("Genemu - Sega Genesis Emulator",
-        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        WINDOW_WIDTH, WINDOW_WIDTH*3/4, SDL_WINDOW_RESIZABLE);
-    renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_PRESENTVSYNC);
-
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");  // make the scaled rendering look smoother.
-    SDL_RenderSetLogicalSize(renderer, 320, 240);
-
-    frame = SDL_CreateTexture(renderer,
-                              SDL_PIXELFORMAT_ABGR8888,
-                              SDL_TEXTUREACCESS_STREAMING,
-                              320, 240);
-
     keystate = SDL_GetKeyboardState(NULL);
 
-
-#if 1
     samples_per_frame = audiofreq / fps;
     fprintf(stderr, "Music set to %d FPS\n", fps);
 
@@ -71,9 +58,6 @@ void hw_init(int audiofreq, int fps)
 
     for (int i=0;i<HW_AUDIO_NUMBUFFERS;++i)
         AUDIO_BUF[i] = calloc(samples_per_frame*2*2, 1);
-
-    SDL_PauseAudio(0);
-#endif
 }
 
 int hw_poll(void)
@@ -108,6 +92,39 @@ int hw_poll(void)
     return 1;
 }
 
+void hw_enable_audio(int enable)
+{
+    SDL_PauseAudio(!enable);
+    g_audioenable = enable;
+}
+
+void hw_enable_video(int enable)
+{
+    if (enable && !g_videoenable)
+    {
+        screen = SDL_CreateWindow("Genemu - Sega Genesis Emulator",
+            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+            WINDOW_WIDTH, WINDOW_WIDTH*3/4, SDL_WINDOW_RESIZABLE);
+        renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_PRESENTVSYNC);
+
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");  // make the scaled rendering look smoother.
+        SDL_RenderSetLogicalSize(renderer, 320, 240);
+
+        frame = SDL_CreateTexture(renderer,
+                                  SDL_PIXELFORMAT_ABGR8888,
+                                  SDL_TEXTUREACCESS_STREAMING,
+                                  320, 240);
+    }
+    else if (!enable && !g_videoenable)
+    {
+        SDL_DestroyTexture(frame); frame=NULL;
+        SDL_DestroyRenderer(renderer); renderer = NULL;
+        SDL_DestroyWindow(screen); screen = NULL;
+    }
+
+    g_videoenable = enable;
+}
+
 void hw_beginframe(uint8_t **screen, int *pitch)
 {
     *screen = framebuf;
@@ -118,29 +135,42 @@ void hw_beginframe(uint8_t **screen, int *pitch)
 
 void hw_endframe(void)
 {
-    if (audiocounter < framecounter)
+    if (g_videoenable)
     {
-        SDL_UpdateTexture(frame, NULL, framebuf, 320*4);
+        if (audiocounter < framecounter)
+        {
+            SDL_UpdateTexture(frame, NULL, framebuf, 320*4);
 
-        SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, frame, NULL, NULL);
-        SDL_RenderPresent(renderer);
-        fpscounter += 1;
+            SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, frame, NULL, NULL);
+            SDL_RenderPresent(renderer);
+            fpscounter += 1;
 
-        while (audiocounter < framecounter)
-            SDL_Delay(1);
-    }
+            while (audiocounter < framecounter)
+                SDL_Delay(1);
+        }
 
-    if (fpsclock+1000 < SDL_GetTicks())
-    {
-        char title[256];
-        sprintf(title, "Genemu - Sega Genesis Emulator - %d FPS", fpscounter);
-        SDL_SetWindowTitle(screen, title);
-        fpscounter = 0;
-        fpsclock += 1000;
+        if (fpsclock+1000 < SDL_GetTicks())
+        {
+            char title[256];
+            sprintf(title, "Genemu - Sega Genesis Emulator - %d FPS", fpscounter);
+            SDL_SetWindowTitle(screen, title);
+            fpscounter = 0;
+            fpsclock += 1000;
+        }
     }
 
     framecounter += 1;
+}
+
+void hw_save_screenshot(const char *fn)
+{
+    SDL_Surface* saveSurface = SDL_CreateRGBSurfaceFrom(
+        framebuf, 320, 240, 32, 320*4,
+        0x00000FF, 0x0000FF00, 0x00FF0000, 0);
+    assert(saveSurface);
+    SDL_SaveBMP(saveSurface, fn);
+    SDL_FreeSurface(saveSurface);
 }
 
 void hw_beginaudio(int16_t **buf, int *nsamples)

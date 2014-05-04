@@ -491,8 +491,15 @@ void GFX::render_scanline(uint8_t *screen, int line)
     }
 }
 
+static bool g_enabled;
+
+void gfx_enable(bool enable)
+{
+    g_enabled = enable;
+}
 
 void gfx_render_scanline(uint8_t *screen, int line)
 {
+    if (!g_enabled) return;
     GFX.render_scanline(screen, line);
 }

@@ -555,7 +555,7 @@ void mem_err(const char *subs, const char *fmt, ...)
     va_end(va);
 }
 
-bool mem_apply_gamegenie(char *gg)
+bool mem_apply_gamegenie(const char *gg)
 {
     static const char tbl[] = { "ABCDEFGHJKLMNPRSTVWXYZ0123456789" };
     uint64_t num = 0;
