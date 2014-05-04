@@ -556,23 +556,32 @@ void VDP::scanline_hblank(uint8_t *screen)
         gfx_mask_scanline(screen, _vcounter, display_enabled_midframe);
     }
 
-    // if (mode_h40)
-    // {
-    //     if (hcounter() != 0x14A)
-    //     {
-    //         printf("ERROR HCOUNTER40 %x\n", hcounter());
-    //         assert(0);
-    //     }
-    // }
-    // else
-    // {
-    //     if (hcounter() != 0x10A)
-    //     {
-    //         printf("ERROR HCOUNTER32 %x\n", hcounter());
-    //         assert(0);
-    //     }
-    // }
     in_scanline_hblank = true;
+
+    // Line counter is decremented after the start of line #0 up
+    // to after the start of the first non-visible line, so
+    // it's actually executed one time more per frame. This has been
+    // semi-verified by outrunners and gunstarheroes.
+    if (_vcounter <= (mode_v40 ? 0xF0 : 0xE0))
+    {
+        if (--line_counter_interrupt < 0)
+        {
+            if (REG0_LINE_INTERRUPT)
+            {
+                mem_log("VDP", "HINTERRUPT (_vcounter: %d, hcounter: %02x, new counter: %d)\n", _vcounter, hcounter(), REG10_LINE_COUNTER);
+                if (!dma_m68k_running)
+                {
+                    extern int TRACE_COUNT;
+                    TRACE_COUNT = 200;
+                    CPU_M68K.irq(4);
+                }
+                else
+                    mem_log("VDP", "Skipping HINTERRUPT (?)\n");
+            }
+
+            line_counter_interrupt = REG10_LINE_COUNTER;
+        }
+    }
 
     _vcounter++;
     if (_vcounter == (VERSION_PAL ? 313 : 262))
@@ -596,26 +605,6 @@ void VDP::scanline_hblank(uint8_t *screen)
         assert(!vblank() || !REG1_DISP_ENABLED);
         update_access_slot_freq();
     }
-
-    // Line counter is decremented before the start of line #0 up
-    // to before the start of the first non-visible line, so
-    // it's actually executed one time more per frame. This has been
-    // semi-verified by outrunners and gunstarheroes.
-    if (_vcounter <= (mode_v40 ? 0xF0 : 0xE0))
-    {
-        if (--line_counter_interrupt < 0)
-        {
-            if (REG0_LINE_INTERRUPT)
-            {
-                mem_log("VDP", "HINTERRUPT (_vcounter: %d, new counter: %d)\n", _vcounter, REG10_LINE_COUNTER);
-                if (!dma_m68k_running)
-                    CPU_M68K.irq(4);
-            }
-
-            line_counter_interrupt = REG10_LINE_COUNTER;
-        }
-    }
-
 }
 
 void VDP::scanline_end(uint8_t* screen)
