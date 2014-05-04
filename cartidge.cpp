@@ -145,9 +145,14 @@ void cartidge_init(void)
     memcpy(region, &ROM[0x1F0], 0x10);
     fprintf(stderr, "Region: %s\n", region);
 
-    if (memchr(region, 'J', 4) || memchr(region, 'U', 4) || memchr(region, '1', 4))
+    if (memchr(region, 'J', 4) || memchr(region, '1', 4))
     {
         VERSION_OVERSEA = 0;
+        VERSION_PAL = 0;
+    }
+    else if (memchr(region, 'U', 4))
+    {
+        VERSION_OVERSEA = 1;
         VERSION_PAL = 0;
     }
     else if (memchr(region, 'E', 4) || memchr(region, '8', 4) || memchr(region, 'F', 4))
