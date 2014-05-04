@@ -1516,6 +1516,8 @@ INLINE void OPNWriteMode(int r, int v)
   UINT8 c;
   FM_CH *CH;
 
+  OPNREGS[r] = v;
+
   switch(r){
     case 0x21:  /* Test */
       break;
@@ -2145,9 +2147,22 @@ void YM2612SaveRegs(uint8_t *regs)
 
 void YM2612LoadRegs(uint8_t *regs)
 {
-  int i;
+  int i,c,s;
   for (i=0;i<sizeof(OPNREGS);++i)
-    OPNWriteReg(i, *regs++);
+  {
+    if (i <= 0x30)
+      OPNWriteMode(i, *regs++);
+    else
+      OPNWriteReg(i, *regs++);
+  }
+
+  /* restore outputs connections */
+  setup_connection(&ym2612.CH[0],0);
+  setup_connection(&ym2612.CH[1],1);
+  setup_connection(&ym2612.CH[2],2);
+  setup_connection(&ym2612.CH[3],3);
+  setup_connection(&ym2612.CH[4],4);
+  setup_connection(&ym2612.CH[5],5);
 }
 
 
