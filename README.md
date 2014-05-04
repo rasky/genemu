@@ -18,6 +18,7 @@ codes on the command line, and they will be applied at startup.
 What's emulated
 ===============
  * All the basics: CPUs, sprites, planes, DMA, etc.
+ * PAL vs NTSC timings 
  * Accurate Z80 RESET/BUSREQ process
  * Correct hinterrupt / hv counter
  * Correct sprite priority vs bkg
@@ -28,14 +29,12 @@ What's emulated
  * Basic HINTERRUPT emulation
  * Vertical cell scrolling through VSRAM
  * Window horizontal clipping
- * PAL vs NTSC game detection
 
 Todo list
 =========
 The following is a rough list of missing features or things to be fixed:
 
  * Interlace mode
- * PAL resolution (V30)
  * SN7689 audio chip
  * Accurate timing for DMA
  * The infamous "window bug"
