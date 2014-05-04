@@ -25,8 +25,9 @@ int main(int argc, const char *argv[])
     opt.syntax = "genemu [OPTIONS] rom";
     opt.add("",0,0,0,"Display usage instructions.", "-h", "--help");
     opt.add("",0,-1,',',"Apply Game Genie codes [format=ABCD-EFGH]", "--gamegenie", "--gg");
-    opt.add("",0,1,0,"Force console type [accepted values: PAL or NTSC]", "-m", "--mode", "--type");
+    opt.add("",0,1,0,"Force console type [accepted values: PAL or NTSC]", "--mode", "--type");
     opt.add("",0,-1,',',"Make screenshots on the specified frames and exit", "--screenshots");
+    opt.add("",0,1,0,"Load from saved state", "--load");
 
     opt.parse(argc, argv);
     if (opt.isSet("-h"))
@@ -121,6 +122,13 @@ int main(int argc, const char *argv[])
     CPU_M68K.reset();
     VDP.reset();
 
+    if (opt.isSet("--load"))
+    {
+        std::string sn;
+        opt.get("--load")->getString(sn);
+        loadstate(sn.c_str());
+    }
+
     while (hw_poll())
     {
         if (ss_idx < ss_frames.size() && framecounter == ss_frames[ss_idx])
@@ -171,6 +179,10 @@ int main(int argc, const char *argv[])
             sprintf(ssname, "%s.%d.%s.bmp", romname, framecounter, (VERSION_PAL ? "PAL" : "NTSC"));
             std::cerr << "Saving screenshot " << ssname << std::endl;
             hw_save_screenshot(ssname);
+
+            sprintf(ssname, "%s.%d.%s.gs", romname, framecounter, (VERSION_PAL ? "PAL" : "NTSC"));
+            savestate(ssname);
+
             ++ss_idx;
             if (ss_idx == ss_frames.size())
                 break;
@@ -187,16 +199,38 @@ int main(int argc, const char *argv[])
     assert(checksum == m68k_read_memory_16(0x18e));
 #endif
 
+#if 0
+    {
+    char buf[256];
+    int pc = 0xffffee00;
+    FILE *f = fopen(buf, "w");
+    while (pc <= 0xffffef00) {
+        int oplen = m68k_disassemble(buf, pc, M68K_CPU_TYPE_68000);
+        fprintf(stdout, "%06x\t%s\n", pc, buf);
+        pc += oplen;
+    }
+    fclose(f);
+    }
+#endif
+
     return 0;
 }
 
+#if 0
+int TRACE_COUNT = 0;
 
 extern "C" void gentrace(void);
 void gentrace(void)
 {
-    uint32_t pc = m68k_get_reg(NULL, M68K_REG_PC);
+    return;
+    if (TRACE_COUNT > 0 || VDP.vcounter() == 33)
+    {
+        uint32_t pc = m68k_get_reg(NULL, M68K_REG_PC);
+        char buf[2048];
+        int oplen = m68k_disassemble(buf, pc, M68K_CPU_TYPE_68000);
+        fprintf(stdout, "%06x\t%s\t\t[HC=%x]\n", pc, buf, VDP.hcounter());
 
-    char buf[2048];
-    int oplen = m68k_disassemble(buf, pc, M68K_CPU_TYPE_68000);
-    fprintf(stdout, "%06x\t%s\t\t[A0=%08x]\n", pc, buf, m68k_get_reg(NULL, M68K_REG_A0));
+        --TRACE_COUNT;
+    }
 }
+#endif
