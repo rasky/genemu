@@ -128,7 +128,7 @@ void VDP::register_w(int reg, uint8_t value)
 
     uint8_t oldvalue = regs[reg];
     regs[reg] = value;
-    fprintf(stdout, "[VDP][PC=%06x](%04d) reg:%02d <- %02x\n", m68k_get_reg(NULL, M68K_REG_PC), framecounter, reg, value);
+    mem_log("VDP", "reg:%02d <- %02x\n", reg, value);
 
     // Writing a register clear the first command word
     // (see sonic3d intro wrong colors, and vdpfifotesting)
@@ -571,11 +571,7 @@ void VDP::scanline_hblank(uint8_t *screen)
             {
                 mem_log("VDP", "HINTERRUPT (_vcounter: %d, hcounter: %02x, new counter: %d)\n", _vcounter, hcounter(), REG10_LINE_COUNTER);
                 if (!dma_m68k_running)
-                {
-                    extern int TRACE_COUNT;
-                    TRACE_COUNT = 200;
                     CPU_M68K.irq(4);
-                }
                 else
                     mem_log("VDP", "Skipping HINTERRUPT (?)\n");
             }

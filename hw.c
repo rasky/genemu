@@ -10,21 +10,25 @@ static SDL_Renderer *renderer;
 static SDL_Texture *frame;
 static uint8_t framebuf[320*240*4];
 
-static int16_t AUDIO_BUF[HW_AUDIO_NUMBUFFERS][HW_AUDIO_NUMSAMPLES*2];
+static int16_t *AUDIO_BUF[HW_AUDIO_NUMBUFFERS];
 static int audio_buf_index_w=1, audio_buf_index_r=0;
 const uint8_t *keystate;
 uint8_t keypressed[256];
 uint8_t keyreleased[256];
 static uint8_t keyoldstate[256];
-static clock_t frameclock;
+static int samples_per_frame;
 static int framecounter;
 static int audiocounter;
+static clock_t fpsclock;
+static int fpscounter;
+static int g_audioenable;
+static int g_videoenable;
 
-#define ZOOM 3
+#define WINDOW_WIDTH 900
 
 static void fill_audio(void *userdata, uint8_t* stream, int len);
 
-void hw_init(void)
+void hw_init(int audiofreq, int fps)
 {
     if ( SDL_Init(SDL_INIT_AUDIO|SDL_INIT_VIDEO) < 0 )
     {
@@ -33,34 +37,18 @@ void hw_init(void)
     }
     atexit(SDL_Quit);
 
-#if 1
-    screen = SDL_CreateWindow("Genemu - Sega Genesis Emulator",
-        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        320*ZOOM, 244*ZOOM, SDL_WINDOW_RESIZABLE);
-    renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_PRESENTVSYNC);
-#else
-    SDL_CreateWindowAndRenderer(320*ZOOM, 240*ZOOM, SDL_WINDOW_RESIZABLE,
-        &screen, &renderer);
-#endif
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");  // make the scaled rendering look smoother.
-    SDL_RenderSetLogicalSize(renderer, 320, 240);
-
-    frame = SDL_CreateTexture(renderer,
-                              SDL_PIXELFORMAT_ABGR8888,
-                              SDL_TEXTUREACCESS_STREAMING,
-                              320, 240);
-
     keystate = SDL_GetKeyboardState(NULL);
 
+    samples_per_frame = audiofreq / fps;
+    fprintf(stderr, "Music set to %d FPS\n", fps);
 
-#if 1
     /* Initialize audio */
     SDL_AudioSpec wanted;
 
-    wanted.freq = HW_AUDIO_FREQ;
+    wanted.freq = audiofreq;
     wanted.format = AUDIO_S16;
     wanted.channels = 2;
-    wanted.samples = HW_AUDIO_NUMSAMPLES;
+    wanted.samples = samples_per_frame;
     wanted.callback = fill_audio;
     wanted.userdata = NULL;
     if (SDL_OpenAudio(&wanted, NULL) < 0) {
@@ -68,8 +56,8 @@ void hw_init(void)
         exit(1);
     }
 
-    SDL_PauseAudio(0);
-#endif
+    for (int i=0;i<HW_AUDIO_NUMBUFFERS;++i)
+        AUDIO_BUF[i] = calloc(samples_per_frame*2*2, 1);
 }
 
 int hw_poll(void)
@@ -104,6 +92,39 @@ int hw_poll(void)
     return 1;
 }
 
+void hw_enable_audio(int enable)
+{
+    SDL_PauseAudio(!enable);
+    g_audioenable = enable;
+}
+
+void hw_enable_video(int enable)
+{
+    if (enable && !g_videoenable)
+    {
+        screen = SDL_CreateWindow("Genemu - Sega Genesis Emulator",
+            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+            WINDOW_WIDTH, WINDOW_WIDTH*3/4, SDL_WINDOW_RESIZABLE);
+        renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_PRESENTVSYNC);
+
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");  // make the scaled rendering look smoother.
+        SDL_RenderSetLogicalSize(renderer, 320, 240);
+
+        frame = SDL_CreateTexture(renderer,
+                                  SDL_PIXELFORMAT_ABGR8888,
+                                  SDL_TEXTUREACCESS_STREAMING,
+                                  320, 240);
+    }
+    else if (!enable && !g_videoenable)
+    {
+        SDL_DestroyTexture(frame); frame=NULL;
+        SDL_DestroyRenderer(renderer); renderer = NULL;
+        SDL_DestroyWindow(screen); screen = NULL;
+    }
+
+    g_videoenable = enable;
+}
+
 void hw_beginframe(uint8_t **screen, int *pitch)
 {
     *screen = framebuf;
@@ -114,24 +135,45 @@ void hw_beginframe(uint8_t **screen, int *pitch)
 
 void hw_endframe(void)
 {
-    if (audiocounter < framecounter)
+    if (g_videoenable)
     {
-        SDL_UpdateTexture(frame, NULL, framebuf, 320*4);
+        if (audiocounter < framecounter)
+        {
+            SDL_UpdateTexture(frame, NULL, framebuf, 320*4);
 
-        SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, frame, NULL, NULL);
-        SDL_RenderPresent(renderer);
+            SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, frame, NULL, NULL);
+            SDL_RenderPresent(renderer);
+            fpscounter += 1;
 
-        while (audiocounter < framecounter)
-            SDL_Delay(1);
+            while (audiocounter < framecounter)
+                SDL_Delay(1);
+        }
+
+        if (fpsclock+1000 < SDL_GetTicks())
+        {
+            char title[256];
+            sprintf(title, "Genemu - Sega Genesis Emulator - %d FPS", fpscounter);
+            SDL_SetWindowTitle(screen, title);
+            fpscounter = 0;
+            fpsclock += 1000;
+        }
     }
-    else
-        printf("HW: frameskipping %d\n", framecounter);
 
     framecounter += 1;
 }
 
-void hw_beginaudio(int16_t **buf)
+void hw_save_screenshot(const char *fn)
+{
+    SDL_Surface* saveSurface = SDL_CreateRGBSurfaceFrom(
+        framebuf, 320, 240, 32, 320*4,
+        0x00000FF, 0x0000FF00, 0x00FF0000, 0);
+    assert(saveSurface);
+    SDL_SaveBMP(saveSurface, fn);
+    SDL_FreeSurface(saveSurface);
+}
+
+void hw_beginaudio(int16_t **buf, int *nsamples)
 {
     extern int framecounter;
 #if 1
@@ -139,6 +181,7 @@ void hw_beginaudio(int16_t **buf)
         printf("[AUDIO](FC=%04d/R=%04d/W%04d) Warning: overflow audio buffer (producing too fast)\n", framecounter, audio_buf_index_r, audio_buf_index_w);
 #endif
     *buf = AUDIO_BUF[audio_buf_index_w % HW_AUDIO_NUMBUFFERS];
+    *nsamples = samples_per_frame;
 }
 
 void hw_endaudio(void)
@@ -157,7 +200,7 @@ void fill_audio(void *userdata, uint8_t *stream, int len)
         return;
     }
 
-    assert(sizeof(AUDIO_BUF) / HW_AUDIO_NUMBUFFERS == len);
+    assert(samples_per_frame*2*2 == len);   // 2 channels, 2 bytes
     memcpy(stream, AUDIO_BUF[audio_buf_index_r++ % HW_AUDIO_NUMBUFFERS], len);
     ++audiocounter;
 }

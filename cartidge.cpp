@@ -145,20 +145,15 @@ void cartidge_init(void)
     memcpy(region, &ROM[0x1F0], 0x10);
     fprintf(stderr, "Region: %s\n", region);
 
-    if (memchr(region, 'E', sizeof(region)) || memchr(region, '8', sizeof(region)))
+    if (memchr(region, 'J', 4) || memchr(region, 'U', 4) || memchr(region, '1', 4))
+    {
+        VERSION_OVERSEA = 0;
+        VERSION_PAL = 0;
+    }
+    else if (memchr(region, 'E', 4) || memchr(region, '8', 4) || memchr(region, 'F', 4))
     {
         VERSION_OVERSEA = 1;
         VERSION_PAL = 1;
-    }
-    else if (memchr(region, '1', sizeof(region)))
-    {
-        VERSION_OVERSEA = 0;
-        VERSION_PAL = 0;
-    }
-    else if (memchr(region, 'J', sizeof(region)))
-    {
-        VERSION_OVERSEA = 0;
-        VERSION_PAL = 0;
     }
 
     if (ROM[0x1B0] == 'R' && ROM[0x1B1] == 'A')
@@ -182,4 +177,6 @@ void cartidge_init(void)
     {
         m68k_memtable[0xA1] = MEMFUN_PAIR(&SSF2_BANKSWITCH);
     }
+
+    fprintf(stderr, "Autodetect mode: %s\n", VERSION_PAL ? "PAL" : "NTSC");
 }

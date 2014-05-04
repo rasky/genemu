@@ -1,9 +1,13 @@
 
 #include <stdint.h>
 
-#define VDP_MASTER_FREQ       53693175     // NTSC
-//#define VDP_MASTER_FREQ       53203424   // PAL
+#if 0
+#define VDP_MASTER_FREQ       53693175   // NTSC
+#define VDP_MASTER_FREQ       53203424   // PAL
+#endif
+
 #define VDP_CYCLES_PER_LINE   3420
+#define YM2612_FREQ           53267
 
 #define M68K_FREQ_DIVISOR     7
 #define Z80_FREQ_DIVISOR      14
@@ -11,7 +15,7 @@
 class VDP
 {
     friend class GFX;
-    friend void loadstate(const char *fn);
+    friend bool loadstate(const char *fn);
     friend void savestate(const char *fn);
 
 private:

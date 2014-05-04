@@ -533,7 +533,6 @@ void GFX::render_scanline(uint8_t *screen, int line, bool force_display)
     }
 }
 
-
 void GFX::mask_scanline(uint8_t *screen, int line, int *mask)
 {
     uint16_t rgb = VDP.CRAM[BITS(VDP.regs[7], 0, 6) & 0x3F];
@@ -582,12 +581,21 @@ void GFX::mask_scanline(uint8_t *screen, int line, int *mask)
     }
 }
 
+static bool g_enabled;
+
+void gfx_enable(bool enable)
+{
+    g_enabled = enable;
+}
+
 void gfx_mask_scanline(uint8_t *screen, int line, int *mask)
 {
+    if (!g_enabled) return;
     GFX.mask_scanline(screen, line, mask);
 }
 
 void gfx_render_scanline(uint8_t *screen, int line)
 {
+    if (!g_enabled) return;
     GFX.render_scanline(screen, line);
 }

@@ -112,11 +112,11 @@ void savestate(const char *fn)
     fclose(f);
 }
 
-void loadstate(const char *fn)
+bool loadstate(const char *fn)
 {
     uint32_t val;
     FILE *f = fopen(fn, "rb");
-    if (!f) return;
+    if (!f) return false;
 
     fseek(f, 0x80, SEEK_SET);
     CPU_M68K.init();
@@ -137,10 +137,8 @@ void loadstate(const char *fn)
 
     val = 0; fread(&val, 1, 4, f);
     m68k_set_reg(M68K_REG_USP, val);
-    printf("USP: %08x\n", val);
     val = 0; fread(&val, 1, 4, f);
     m68k_set_reg(M68K_REG_ISP, val);
-    printf("ISP: %08x\n", val);
 
     assert(ftell(f) == 0xDA);
     fseek(f, 0xFA, SEEK_SET);
@@ -182,6 +180,7 @@ void loadstate(const char *fn)
     fread(&CPU_Z80._busreq_line, 1, 1, f);
     fseek(f, 2, SEEK_CUR);
     fread(&Z80_BANK, 1, 4, f);
+    CPU_Z80._reset_once = true;
 
     assert(ftell(f) == 0x440);
     fseek(f, 0x474, SEEK_SET);
@@ -192,6 +191,8 @@ void loadstate(const char *fn)
     fread(VDP.VRAM, 1, sizeof(VDP.VRAM), f);
     assert(ftell(f) == 0x22478);
     fclose(f);
+
+    return true;
 }
 
 char* slotname(int slot)

@@ -22,7 +22,7 @@ public:
 
 class CpuZ80
 {
-    friend void loadstate(const char *fn);
+    friend bool loadstate(const char *fn);
     friend void savestate(const char *fn);
 
 private:
