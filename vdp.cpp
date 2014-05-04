@@ -277,7 +277,7 @@ uint16_t VDP::status_register_r(void)
     status |= STATUS_FIFO_EMPTY;
 
     // VBLANK bit
-    if (_vcounter >= (mode_pal ? 0xF0 : 0xE0) || !REG1_DISP_ENABLED)
+    if (vblank())
         status |= STATUS_VBLANK;
 
     // HBLANK bit (see Nemesis doc, as linked in hcounter())
