@@ -144,17 +144,21 @@ void VDP::data_port_w16(uint16_t value)
     switch (code_reg & 0xF)
     {
     case 0x1:
-        mem_log("VDP", "Direct VRAM write: addr:%x increment:%d vcounter:%x hc:%x\n",
-                address_reg, REG15_DMA_INCREMENT, vcounter(), hcounter());
+        mem_log("VDP", "Direct VRAM write: addr:%x increment:%d value:%04x A0=%x vc:%x hc:%x\n",
+                address_reg, REG15_DMA_INCREMENT, value, m68k_get_reg(NULL, M68K_REG_A0), vcounter(), hcounter());
         VRAM_W((address_reg    ) & 0xFFFF, value >> 8);
         VRAM_W((address_reg ^ 1) & 0xFFFF, value & 0xFF);
         address_reg += REG15_DMA_INCREMENT;
         break;
     case 0x3:
+        mem_log("VDP", "Direct CRAM write: addr:%x increment:%d value:%04x vc:%x hc:%x\n",
+                address_reg, REG15_DMA_INCREMENT, value, vcounter(), hcounter());
         CRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
         break;
     case 0x5:
+        mem_log("VDP", "Direct VSRAM write: addr:%x increment:%d value:%04x vc:%x hc:%x\n",
+                address_reg, REG15_DMA_INCREMENT, value, vcounter(), hcounter());
         VSRAM[(address_reg >> 1) & 0x3F] = value;
         address_reg += REG15_DMA_INCREMENT;
         break;
@@ -428,11 +432,14 @@ void VDP::dma_fill(uint16_t value)
     if (length == 0)
         length = 0xFFFF;
 
+    mem_log("VDP", "(V=%x,H=%x) DMA %s fill: dst:%04x, length:%d, increment:%d, value=%02x\n",
+        vcounter(), hcounter(),
+        (code_reg&0xF)==1 ? "VRAM" : ( (code_reg&0xF)==3 ? "CRAM" : "VSRAM"),
+        address_reg, length, REG15_DMA_INCREMENT, value>>8);
+
     switch (code_reg & 0xF)
     {
     case 0x1:
-        mem_log("VDP", "DMA VRAM fill: address:%04x, increment:%04x, length:%x, value: %04x\n",
-            address_reg, REG15_DMA_INCREMENT, length, value);
         do {
             VRAM_W((address_reg ^ 1) & 0xFFFF, value >> 8);
             address_reg += REG15_DMA_INCREMENT;
@@ -474,6 +481,11 @@ void VDP::dma_m68k()
     // Special case for length = 0 (ex: sonic3d)
     if (length == 0)
         length = 0xFFFF;
+
+    mem_log("VDP", "(V=%x,H=%x) DMA M68k->%s copy: src:%04x, dst:%04x, length:%d, increment:%d\n",
+        vcounter(), hcounter(),
+        (code_reg&0xF)==1 ? "VRAM" : ( (code_reg&0xF)==3 ? "CRAM" : "VSRAM"),
+        (src_addr_high | src_addr_low) << 1, address_reg, length, REG15_DMA_INCREMENT);
 
     do {
         unsigned int value = m68k_read_memory_16((src_addr_high | src_addr_low) << 1);
