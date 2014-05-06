@@ -1892,6 +1892,7 @@ void m68ki_exception_interrupt(uint int_level)
 	uint vector;
 	uint sr;
 	uint new_pc;
+	int new_level;
 
 	#if M68K_EMULATE_ADDRESS_ERROR == OPT_ON
 	if(CPU_TYPE_IS_000(CPU_TYPE))
@@ -1908,7 +1909,8 @@ void m68ki_exception_interrupt(uint int_level)
 		return;
 
 	/* Acknowledge the interrupt */
-	vector = m68ki_int_ack(int_level);
+	new_level = m68ki_int_ack(int_level);
+	vector = M68K_INT_ACK_AUTOVECTOR;
 
 	/* Get the interrupt vector */
 	if(vector == M68K_INT_ACK_AUTOVECTOR)
@@ -1955,7 +1957,9 @@ void m68ki_exception_interrupt(uint int_level)
 #if !M68K_EMULATE_INT_ACK
 	/* Automatically clear IRQ if we are not using an acknowledge scheme */
 	CPU_INT_LEVEL = 0;
-#endif /* M68K_EMULATE_INT_ACK */
+#else
+	CPU_INT_LEVEL = new_level << 8;
+#endif
 }
 
 

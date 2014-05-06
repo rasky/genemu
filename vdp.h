@@ -28,6 +28,7 @@ private:
     uint16_t address_reg;
     uint8_t code_reg;
     uint16_t status_reg;
+    bool hint_pending;
     int _vcounter;
     int line_counter_interrupt;
     bool command_word_pending;
@@ -67,6 +68,8 @@ public:
     void data_port_w16(uint16_t value);
     uint16_t data_port_r16(void);
     uint16_t hvcounter_r16(void);
+
+    int irq_acked(int level);
 };
 
 extern class VDP VDP;

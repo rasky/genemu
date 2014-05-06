@@ -307,9 +307,6 @@ uint16_t VDP::status_register_r(void)
             status |= STATUS_HBLANK;
     }
 
-    if (_vcounter == 224 && status & STATUS_HBLANK)
-        status |= STATUS_VIRQPENDING;
-
     if (sprite_overflow)
         status |= STATUS_SPRITEOVERFLOW;
     if (sprite_collision)
@@ -342,13 +339,8 @@ void VDP::scanline(uint8_t* screen)
     mode_h40 = REG12_MODE_H40;
     mode_pal = REG1_PAL;
 
-    _vcounter++;
-    if (_vcounter == (VERSION_PAL ? 313 : 262))
-    {
-        _vcounter = 0;
-        sprite_overflow = 0;
-        sprite_collision = false;
-    }
+    mem_log("VDP", "render scanline %d\n", _vcounter);
+    gfx_render_scanline(screen, _vcounter);
 
     // On these lines, the line counter interrupt is reloaded
     if (_vcounter == 0 || _vcounter >= (mode_pal ? 0xF1 : 0xE1))
@@ -360,29 +352,39 @@ void VDP::scanline(uint8_t* screen)
 
     if (--line_counter_interrupt < 0)
     {
-        if (REG0_LINE_INTERRUPT && _vcounter <= (mode_pal ? 0xF0 : 0xE0))
+        if (REG0_LINE_INTERRUPT && (_vcounter <= (mode_pal ? 0xF0 : 0xE0)))
         {
             mem_log("VDP", "HINTERRUPT (_vcounter: %d, new counter: %d)\n", _vcounter, REG10_LINE_COUNTER);
-            CPU_M68K.irq(4);
+            hint_pending = true;
+            if (!(status_reg & STATUS_VIRQPENDING))
+                CPU_M68K.irq(4);
         }
 
         line_counter_interrupt = REG10_LINE_COUNTER;
     }
 
-    if (_vcounter == (mode_pal ? 0xF1 : 0xE1))   // vblank begin
+    _vcounter++;
+    if (_vcounter == (VERSION_PAL ? 313 : 262))
+    {
+        _vcounter = 0;
+        sprite_overflow = 0;
+        sprite_collision = false;
+    }
+
+    if (_vcounter == (mode_pal ? 0xF0 : 0xE0))   // vblank begin
     {
         if (REG1_VBLANK_INTERRUPT)
+        {
+            status_reg |= STATUS_VIRQPENDING;
             CPU_M68K.irq(6);
+        }
         CPU_Z80.set_irq_line(true);
     }
-    if (_vcounter == (mode_pal ? 0xF2 : 0xE2))
+    if (_vcounter == (mode_pal ? 0xF1 : 0xE1))
     {
         // The Z80 IRQ line stays asserted for one line
         CPU_Z80.set_irq_line(false);
     }
-
-    mem_log("VDP", "render scanline %d\n", _vcounter);
-    gfx_render_scanline(screen, _vcounter);
 }
 
 unsigned int VDP::num_scanlines(void)
@@ -549,6 +551,11 @@ int VDP::get_nametable_A() { return REG2_NAMETABLE_A; }
 int VDP::get_nametable_W() { return REG3_NAMETABLE_W; }
 int VDP::get_nametable_B() { return REG4_NAMETABLE_B; }
 
+int m68k_int_ack(int irq)
+{
+    return VDP.irq_acked(irq);
+}
+
 void VDP::reset()
 {
     command_word_pending = false;
@@ -558,6 +565,7 @@ void VDP::reset()
     status_reg = 0x3C00;
     line_counter_interrupt = 0;
     hvcounter_latched = false;
+    m68k_set_int_ack_callback(m68k_int_ack);
 }
 
 void vdp_mem_w8(unsigned int address, unsigned int value)
@@ -635,6 +643,21 @@ unsigned int vdp_mem_r16(unsigned int address)
             assert(!"unhandled vdp_mem_r16");
             return 0xFF;
     }
+}
+
+int VDP::irq_acked(int irq)
+{
+    if (irq == 6)
+    {
+        status_reg &= ~STATUS_VIRQPENDING;
+        return hint_pending ? 4 : 0;
+    }
+    else if (irq == 4)
+    {
+        hint_pending = false;
+        return 0;
+    }
+    assert(0);
 }
 
 void vdp_scanline(uint8_t *screen)
