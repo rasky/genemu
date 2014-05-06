@@ -38,3 +38,21 @@ The following is a rough list of missing features or things to be fixed:
  * SN7689 audio chip
  * Accurate timing for DMA
  * The infamous "window bug"
+
+Branches
+========
+The branch "precise_dma_fifo" implements sub-scanline timing of hblank and
+tries to emulate precise DMA and FIFO timings, down to full access slot
+emulations, but without going down to a per-cycle emulation. It is quite
+tricky to get everything right, but the branch is almost to a zero regressions
+with a few improvements with advanced effects. A few things that work better
+in the branch:
+
+ * DMA effects timed with HBLANK seems to work better (eg: 512-color pictures
+   used in demos). In fact, I think the master code can get to the same level
+   of accuracy with a few hacks on timing (to be verified).
+ * Direct Color mode used in demos. This still requires a hack since we still
+   do per-scanline VDP rendering, but the DMA is almost perfectly synchronized
+   with the emulation; the images still appear off-center and partly off-screen,
+   but I'm still surprised they kind of work.
+
