@@ -158,7 +158,11 @@ void VDP::register_w(int reg, uint8_t value)
                 // Change in display enable: update access slot frequency
                 update_access_slot_freq();
 
-                if (!REG1_DISP_ENABLED && in_hblank)
+                // If we either enable or disable display during the hblank period,
+                // record it as it will affect sprite display. Notice that we're doing
+                // some HLE here: we assume that "hblank" means "anytime after HINT triggered"
+                // so that it reliably works.
+                if (in_scanline_hblank)
                     display_disabled_hblank = true;
                 if (!in_vblank && !in_hblank)
                 {
