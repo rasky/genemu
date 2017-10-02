@@ -178,6 +178,8 @@ void cartidge_init(void)
 
     // Bankswitcher
     if (memcmp(code, "GM MK-12056", 10) == 0 ||   // Super Street Fighter 2
+        memcmp(code, "GM T-12056 ", 10) == 0 ||   // Super Street Fighter 2 (universal)
+        memcmp(code, "DE TITAN002", 10) == 0 ||   // Overdrive 2
         memcmp(code, "GM MK-1354 ", 10) == 0)     // Story of thor
     {
         m68k_memtable[0xA1] = MEMFUN_PAIR(&SSF2_BANKSWITCH);
