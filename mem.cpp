@@ -569,7 +569,7 @@ bool mem_apply_gamegenie(const char *gg)
     {
         char *pos;
         if (i==4) continue;
-        if (!(pos = strchr(tbl, gg[i])))
+        if (!(pos = (char *)strchr(tbl, gg[i])))
             assert(0);
         num = (num << 5) | (pos-tbl);
     }
