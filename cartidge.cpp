@@ -56,12 +56,12 @@ static memfunc_pair BACKUP_RAM_SWITCH = {
     io_mem_r8, io_mem_r16, backup_ram_switch_w8, io_mem_w16
 };
 
-void backup_ram_init(void)
+void backup_ram_init(uint8_t addr)
 {
     backup_ram_present = true;
     backup_ram_enabled = true;
     backup_ram_shadow = (uint8_t*)m68k_memtable[0x20];
-    m68k_memtable[0x20] = MEMFUN_PAIR(&BACKUP_RAM_ACCESS);
+    m68k_memtable[addr] = MEMFUN_PAIR(&BACKUP_RAM_ACCESS);
     m68k_memtable[0xA1] = MEMFUN_PAIR(&BACKUP_RAM_SWITCH);
     memset(BACKUP_RAM, 0xFF, sizeof(BACKUP_RAM));  // required by dinodini
 }
@@ -163,9 +163,11 @@ void cartidge_init(void)
 
     if (ROM[0x1B0] == 'R' && ROM[0x1B1] == 'A')
     {
-        fprintf(stderr, "RAM definition: start:%06x end:%06x\n",
-            m68k_read_memory_32(0x1b4), m68k_read_memory_32(0x1b8));
-        backup_ram_init();
+        uint32_t start = m68k_read_memory_32(0x1b4);
+        uint32_t end = m68k_read_memory_32(0x1b8);
+        fprintf(stderr, "Extra RAM definition: type:%02x start:%06x end:%06x\n", 
+            m68k_read_memory_8(0x1b2), start, end);
+        backup_ram_init((start >> 16) & 0xFF);
     }
     else
     if (memcmp(code, "GM MK-1079 ", 10) == 0 ||   // Sonic3
@@ -173,7 +175,7 @@ void cartidge_init(void)
         memcmp(code, "GM MK-1354 ", 10) == 0)     // Story of thor
     {
         mem_log("CARTIDGE", "Backup RAM\n");
-        backup_ram_init();
+        backup_ram_init(0x20);
     }
 
     // Bankswitcher
