@@ -6,7 +6,7 @@
 uint8_t *backup_ram_shadow;
 bool backup_ram_present;
 bool backup_ram_enabled;
-uint8_t BACKUP_RAM[0x2000];
+uint8_t BACKUP_RAM[0x10000];
 
 void backup_ram_switch_w8(unsigned int address, unsigned int value)
 {
@@ -22,15 +22,15 @@ void backup_ram_switch_w8(unsigned int address, unsigned int value)
 unsigned int backup_ram_r8(unsigned int address)
 {
     address &= 0xFFFF;
-    if (backup_ram_enabled && address < 0x4000)
-        return BACKUP_RAM[address >> 1];
+    if (backup_ram_enabled)
+        return BACKUP_RAM[address];
     return backup_ram_shadow[address];
 }
 
 unsigned int backup_ram_r16(unsigned int address)
 {
     address &= 0xFFFF;
-    if (backup_ram_enabled && address < 0x4000)
+    if (backup_ram_enabled)
         return (BACKUP_RAM[address] << 8) | BACKUP_RAM[address+1];
     return (backup_ram_shadow[address] << 8) | backup_ram_shadow[address+1];
 }
@@ -38,9 +38,22 @@ unsigned int backup_ram_r16(unsigned int address)
 void backup_ram_w8(unsigned int address, unsigned int value)
 {
     address &= 0xFFFF;
-    if (backup_ram_enabled && address < 0x4000)
+    if (backup_ram_enabled)
     {
-        BACKUP_RAM[address >> 1] = value;
+        BACKUP_RAM[address] = value;
+        return;
+    }
+
+    assert(!"write to backup RAM when not enabled");
+}
+
+void backup_ram_w16(unsigned int address, unsigned int value)
+{
+    address &= 0xFFFF;
+    if (backup_ram_enabled)
+    {
+        BACKUP_RAM[address] = value >> 8;
+        BACKUP_RAM[address+1] = value & 0xFF;
         return;
     }
 
@@ -48,7 +61,7 @@ void backup_ram_w8(unsigned int address, unsigned int value)
 }
 
 static memfunc_pair BACKUP_RAM_ACCESS = {
-    backup_ram_r8, backup_ram_r16, backup_ram_w8, NULL
+    backup_ram_r8, backup_ram_r16, backup_ram_w8, backup_ram_w16
 };
 
 
@@ -172,6 +185,8 @@ void cartidge_init(void)
     else
     if (memcmp(code, "GM MK-1079 ", 10) == 0 ||   // Sonic3
         memcmp(code, "GM MK-1304 ", 10) == 0 ||   // Warriors of the sun
+        memcmp(code, "GM T-172176", 10) == 0 ||   // NHL98
+        memcmp(code, "GM T-172186", 10) == 0 ||   // NBA98
         memcmp(code, "GM MK-1354 ", 10) == 0)     // Story of thor
     {
         mem_log("CARTIDGE", "Backup RAM\n");
